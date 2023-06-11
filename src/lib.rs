@@ -9,22 +9,15 @@
 //! WASM app to show causal information
 
 mod app;
+mod bounds;
 mod css;
 mod svggraph;
+mod svgvertex;
 
 use app::App;
+use futures_signals::signal::Mutable;
+use svgvertex::VertexType;
 use wasm_bindgen::prelude::*;
-
-/// vertex type
-#[derive(Debug)]
-pub enum VertexType {
-    /// Default vertex type
-    None,
-    /// Outcome vertex
-    Outcome,
-    /// Exposure vertex
-    Exposure,
-}
 
 /// Node information to represent a vertex.
 #[derive(Debug)]
@@ -33,7 +26,7 @@ pub struct NodeInfo {
     _weight: u32,
     layout_pos_x: f64,
     layout_pos_y: f64,
-    vertex_type: VertexType,
+    vertex_type: Mutable<VertexType>,
 }
 
 impl NodeInfo {
@@ -44,7 +37,7 @@ impl NodeInfo {
             _weight: 1,
             layout_pos_x,
             layout_pos_y,
-            vertex_type,
+            vertex_type: Mutable::new(vertex_type),
         }
     }
 }
