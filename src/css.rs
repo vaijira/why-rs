@@ -17,3 +17,7 @@ pub(crate) static SVG_DIV_CLASS: Lazy<String> = Lazy::new(|| {
         .style("overflow", "hidden")
     }
 });
+
+pub(crate) static PATH_CLASS: Lazy<String> = Lazy::new(|| {
+    class! {}
+});

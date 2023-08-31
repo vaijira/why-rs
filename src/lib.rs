@@ -11,39 +11,18 @@
 mod app;
 mod bounds;
 mod css;
+mod graph;
+mod svgedge;
 mod svggraph;
 mod svgvertex;
 
 use app::App;
-use futures_signals::signal::Mutable;
-use svgvertex::VertexType;
+
+use graph::{EdgeInfo, NodeInfo};
 use wasm_bindgen::prelude::*;
 
-/// Node information to represent a vertex.
-#[derive(Debug)]
-pub struct NodeInfo {
-    id: String,
-    _weight: u32,
-    layout_pos_x: f64,
-    layout_pos_y: f64,
-    vertex_type: Mutable<VertexType>,
-}
-
-impl NodeInfo {
-    /// Create a new vertex.
-    pub fn new(id: &str, layout_pos_x: f64, layout_pos_y: f64, vertex_type: VertexType) -> Self {
-        NodeInfo {
-            id: id.to_string(),
-            _weight: 1,
-            layout_pos_x,
-            layout_pos_y,
-            vertex_type: Mutable::new(vertex_type),
-        }
-    }
-}
-
 /// Default type for graphs
-pub type ADMG = daggy::Dag<NodeInfo, u32, u32>;
+pub type ADMG = daggy::Dag<NodeInfo, EdgeInfo, u32>;
 
 #[wasm_bindgen(start)]
 /// Main entry point for why-rs app

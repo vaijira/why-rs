@@ -6,25 +6,37 @@ use once_cell::sync::Lazy;
 
 use crate::{
     bounds::{Bounds, VIEWBOX_HEIGHT, VIEWBOX_WIDTH},
-    svgvertex::SVGVertex,
+    svgedge::SvgEdge,
+    svgvertex::SvgVertex,
     ADMG,
 };
 
-pub struct SVGGraph {
+pub struct SvgGraph {
     pub(crate) admg: ADMG,
-    pub(crate) vertexes: MutableVec<Arc<SVGVertex>>,
+    pub(crate) vertexes: MutableVec<Arc<SvgVertex>>,
+    pub(crate) edges: MutableVec<Arc<SvgEdge>>,
 }
 
 static VIEWBOX_STR: Lazy<String> =
     Lazy::new(|| format!("0 0 {} {}", VIEWBOX_WIDTH, VIEWBOX_HEIGHT));
 
-impl SVGGraph {
+impl SvgGraph {
     pub fn new(admg: ADMG) -> Arc<Self> {
         let vertexes = MutableVec::new();
         for idx in admg.graph().node_indices() {
-            vertexes.lock_mut().push_cloned(SVGVertex::new(idx))
+            vertexes.lock_mut().push_cloned(SvgVertex::new(idx))
         }
-        Arc::new(Self { admg, vertexes })
+
+        let edges = MutableVec::new();
+        for idx in admg.graph().edge_indices() {
+            edges.lock_mut().push_cloned(SvgEdge::new(idx))
+        }
+
+        Arc::new(Self {
+            admg,
+            vertexes,
+            edges,
+        })
     }
 
     pub fn render(g: Arc<Self>) -> Dom {
@@ -36,10 +48,16 @@ impl SVGGraph {
             .attr("viewBox", &VIEWBOX_STR)
             .children_signal_vec(
                 g.vertexes.signal_vec_cloned()
-                .map(clone!(g => move |vertex| {
-                    SVGVertex::render(vertex, g.clone(), &bounds)
+                .map(clone!(g, bounds => move |vertex| {
+                    SvgVertex::render(vertex, g.clone(), bounds.clone())
                 })
             ))
+            .children_signal_vec(
+                g.edges.signal_vec_cloned()
+                .map(clone!(g => move |edge| {
+                    SvgEdge::render(edge, g.clone(), bounds.clone())
+                }))
+            )
         })
     }
 }

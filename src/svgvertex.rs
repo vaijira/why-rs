@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use daggy::NodeIndex;
-use dominator::{clone, events, svg, Dom};
+use dominator::{clone, events, svg, with_node, Dom};
 use futures_signals::signal::Mutable;
+use web_sys::SvgPathElement;
 
-use crate::{bounds::Bounds, svggraph::SVGGraph};
+use crate::{bounds::Bounds, svggraph::SvgGraph};
 
 /// vertex type
 #[derive(Debug)]
@@ -17,7 +18,7 @@ pub enum VertexType {
     Exposure,
 }
 #[derive(Clone, Debug)]
-pub struct SVGVertex {
+pub struct SvgVertex {
     id: NodeIndex,
     marked: Mutable<bool>,
 }
@@ -30,7 +31,7 @@ const CSS_VERTEX_TYPE_NONE_STROKE_COLOR: &str = "#666666";
 const CSS_VERTEX_TYPE_EXPOSURE_STROKE_COLOR: &str = "#000000";
 const CSS_VERTEX_TYPE_OUTCOME_STROKE_COLOR: &str = "#000000";
 
-impl SVGVertex {
+impl SvgVertex {
     pub fn new(id: NodeIndex) -> Arc<Self> {
         Arc::new(Self {
             id,
@@ -38,13 +39,13 @@ impl SVGVertex {
         })
     }
 
-    pub fn render(v: Arc<SVGVertex>, g: Arc<SVGGraph>, bounds: &Bounds) -> Dom {
+    pub fn render(v: Arc<SvgVertex>, g: Arc<SvgGraph>, bounds: Bounds) -> Dom {
         let info = g.admg.node_weight(v.id).unwrap();
-        let (x, y) = bounds.to_svg_coordinates(info.layout_pos_x, info.layout_pos_y);
+        let point = bounds.to_svg_coordinates(&info.layout_pos);
 
-        let translate = format!("translate({}, {})", x, y);
+        let translate = format!("translate({}, {})", point.x(), point.y());
         let children = vec![
-            svg!("path", {
+            svg!("path" => SvgPathElement, {
                 .attr("fill-opacity", "0.7")
                 .attr("z-index", "1")
                 .attr_signal("stroke-width", v.marked.signal_ref({|marked|
@@ -69,6 +70,11 @@ impl SVGVertex {
                     }
                 }))
                 .attr("d", "M 0 0 m 20, 0 a 20,15 0 1,1 -40,0 a 20,15 0 1,1 40,0")
+                .with_node!(path_element => {
+                    .after_inserted(clone!(g, v  => move |_| {
+                         *g.admg.node_weight(v.id).unwrap().vertex_path_element.lock_mut() = Some(path_element);
+                    }))
+                })
             }),
             svg!("rect", {
                 .attr("fill", "#ffffff")
