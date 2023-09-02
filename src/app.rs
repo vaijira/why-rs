@@ -26,7 +26,7 @@ impl App {
             .chain(once((
                 a,
                 z,
-                EdgeInfo::new("", Some(Point::new(-0.791, 1.045)), EdgeType::Directed),
+                EdgeInfo::new("", Some(Point::new(-0.791, -1.045)), EdgeType::Directed),
             )))
             .chain(once((b, d, EdgeInfo::new("", None, EdgeType::Directed))))
             .chain(once((

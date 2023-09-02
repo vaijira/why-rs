@@ -44,11 +44,11 @@ impl SvgEdge {
             .vertex_path_element
             .lock_ref()
             .as_ref()
-            .and_then(|path| Some(path.get_total_length()))
-            .unwrap();
+            .map(|path| path.get_total_length())
+            .unwrap_or(0.0);
 
         let dx = point_v2.x() - point_v1.x();
-        let dy = point_v2.x() - point_v1.x();
+        let dy = point_v2.y() - point_v1.y();
         let length = f64::sqrt((dx * dx) + (dy * dy));
         let length = if length < 0.01 { 0.01 } else { length };
 
@@ -59,10 +59,11 @@ impl SvgEdge {
                 .vertex_path_element
                 .lock_ref()
                 .as_ref()
-                .and_then(|path| {
-                    Some(path.get_point_at_length(
-                        (f64::acos(dx / length) / 2.0 / std::f64::consts::PI) as f32 * svg_length,
-                    ))
+                .map(|path| {
+                    path.get_point_at_length(
+                        (f64::acos(dx / length) / 2.0 / std::f64::consts::PI * svg_length as f64)
+                            as f32,
+                    )
                 })
         } else {
             g.admg
@@ -71,16 +72,16 @@ impl SvgEdge {
                 .vertex_path_element
                 .lock_ref()
                 .as_ref()
-                .and_then(|path| {
-                    Some(path.get_point_at_length(
+                .map(|path| {
+                    path.get_point_at_length(
                         (1.0 - f64::acos(dx / length) / 2.0 / std::f64::consts::PI) as f32
                             * svg_length,
-                    ))
+                    )
                 })
         }
         .unwrap()
         .ok()
-        .and_then(|p| Some(Point::new(p.x() as f64, p.y() as f64)))
+        .map(|p| Point::new(p.x() as f64, p.y() as f64))
         .unwrap_or(Point::new(0.0, 0.0));
 
         let lp = f64::sqrt(svg_point.x() * svg_point.x() + svg_point.y() * svg_point.y());
@@ -98,21 +99,30 @@ impl SvgEdge {
         g: Arc<SvgGraph>,
         point_v1: &Point,
         point_v2: &Point,
+        bounds: &Bounds,
     ) -> (Point, Point) {
         let edge_info = g.admg.edge_weight(edge.id).unwrap();
         let (v1, v2) = g.admg.edge_endpoints(edge.id).unwrap();
         let edge_type = *edge_info.edge_type.lock_ref();
+        let edge_point = edge_info.layout_pos;
 
+        let p2 = edge_point
+            .map(|p| bounds.to_svg_coordinates(&p))
+            .unwrap_or(*point_v2);
         let arrow_head = edge_type == EdgeType::Undirected || edge_type == EdgeType::Directed;
-        let v1_anchor = SvgEdge::svg_edge_anchor(g.clone(), v1, point_v1, point_v2, arrow_head);
+        let v1_anchor = SvgEdge::svg_edge_anchor(g.clone(), v1, point_v1, &p2, arrow_head);
 
+        let p1 = edge_point
+            .map(|p| bounds.to_svg_coordinates(&p))
+            .unwrap_or(*point_v1);
         let arrow_head = edge_type == EdgeType::Undirected;
-        let v2_anchor = SvgEdge::svg_edge_anchor(g, v2, point_v2, point_v1, arrow_head);
+        let v2_anchor = SvgEdge::svg_edge_anchor(g, v2, point_v2, &p1, arrow_head);
 
         (v1_anchor, v2_anchor)
     }
 
     pub fn render(edge: Arc<SvgEdge>, g: Arc<SvgGraph>, bounds: Bounds) -> Dom {
+        let layout_pos = g.admg.edge_weight(edge.id).unwrap().layout_pos;
         let (v1, v2) = g.admg.edge_endpoints(edge.id).unwrap();
         let info_v1 = g.admg.node_weight(v1).unwrap();
         let info_v2 = g.admg.node_weight(v2).unwrap();
@@ -121,26 +131,43 @@ impl SvgEdge {
         let point_v2 = bounds.to_svg_coordinates(&info_v2.layout_pos);
 
         let (anchor_back, anchor_front) =
-            SvgEdge::svg_edge_anchors(edge.clone(), g, &point_v1, &point_v2);
-        let line_path = format!(
-            "M{:.2},{:.2}L{:.2},{:.2}",
-            anchor_back.x(),
-            anchor_back.y(),
-            anchor_front.x(),
-            anchor_front.y()
-        );
+            SvgEdge::svg_edge_anchors(edge.clone(), g, &point_v1, &point_v2, &bounds);
+        let line_path = if let Some(p) = layout_pos {
+            let p = bounds.to_svg_coordinates(&p);
+            format!(
+                "M{:.2},{:.2}Q{:.2},{:.2},{:.2},{:.2}",
+                anchor_back.x(),
+                anchor_back.y(),
+                p.x(),
+                p.y(),
+                anchor_front.x(),
+                anchor_front.y()
+            )
+        } else {
+            format!(
+                "M{:.2},{:.2}L{:.2},{:.2}",
+                anchor_back.x(),
+                anchor_back.y(),
+                anchor_front.x(),
+                anchor_front.y()
+            )
+        };
+
+        let sxy = if let Some(p) = layout_pos {
+            bounds.to_svg_coordinates(&p)
+        } else {
+            point_v1
+        };
 
         let mut afront = 360.0
-            * f64::atan(
-                (anchor_front.y() - anchor_back.y()) / (anchor_front.x() - anchor_back.x()),
-            )
+            * f64::atan((anchor_front.y() - sxy.y()) / (anchor_front.x() - sxy.x()))
             / 2.0
             / std::f64::consts::PI;
-        if anchor_back.x() < anchor_front.x() {
+        if sxy.x() < anchor_front.x() {
             afront += 180.0;
         }
-        if anchor_back.x() == anchor_front.x() {
-            afront = if anchor_front.y() > anchor_back.y() {
+        if sxy.x() == anchor_front.x() {
+            afront = if anchor_front.y() > sxy.y() {
                 -90.0
             } else {
                 90.0

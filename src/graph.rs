@@ -3,7 +3,7 @@ use futures_signals::signal::Mutable;
 use crate::svgedge::EdgeType;
 use crate::svgvertex::VertexType;
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Point {
     x: f64,
     y: f64,
@@ -51,7 +51,7 @@ impl NodeInfo {
 pub struct EdgeInfo {
     pub(crate) _id: String,
     pub(crate) _weight: u32,
-    pub(crate) _layout_pos: Option<Point>,
+    pub(crate) layout_pos: Option<Point>,
     pub(crate) edge_type: Mutable<EdgeType>,
 }
 
@@ -61,7 +61,7 @@ impl EdgeInfo {
         EdgeInfo {
             _id: id.to_string(),
             _weight: 1,
-            _layout_pos: layout_pos,
+            layout_pos,
             edge_type: Mutable::new(edge_type),
         }
     }

@@ -1,7 +1,7 @@
 use crate::{graph::Point, ADMG};
 
-pub(crate) const VIEWBOX_WIDTH: u32 = 800;
-pub(crate) const VIEWBOX_HEIGHT: u32 = 600;
+pub(crate) const VIEWBOX_WIDTH: u32 = 764;
+pub(crate) const VIEWBOX_HEIGHT: u32 = 764;
 
 #[derive(Clone, Debug)]
 pub struct Bounds {

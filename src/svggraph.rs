@@ -54,7 +54,7 @@ impl SvgGraph {
             ))
             .children_signal_vec(
                 g.edges.signal_vec_cloned()
-                .map(clone!(g => move |edge| {
+                .map(clone!(g, bounds => move |edge| {
                     SvgEdge::render(edge, g.clone(), bounds.clone())
                 }))
             )
