@@ -31,7 +31,7 @@ pub fn main_js() -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
 
     wasm_logger::init(
-        wasm_logger::Config::new(log::Level::Debug).module_prefix(env!("CARGO_PKG_NAME")),
+        wasm_logger::Config::new(log::Level::Debug), //.module_prefix(env!("CARGO_PKG_NAME")),
     );
 
     let app = App::new();

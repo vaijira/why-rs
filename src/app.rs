@@ -1,7 +1,9 @@
 use std::{iter::once, sync::Arc};
 
-use dominator::{html, Dom};
+use dominator::{clone, events, html, with_node, Dom};
+use web_sys::HtmlElement;
 
+use crate::bounds::Bounds;
 use crate::css::{MAIN_CLASS, SVG_DIV_CLASS};
 use crate::graph::{EdgeInfo, Point};
 use crate::svgedge::EdgeType;
@@ -47,13 +49,28 @@ impl App {
         html!("main", {
             .class(&*MAIN_CLASS)
             .children(&mut [
-                html!("div", {
+                html!("div" => HtmlElement, {
                     .class(&*SVG_DIV_CLASS)
                     .children(&mut [
                         SvgGraph::render(app.g.clone()),
                     ])
+                    .with_node!(element => {
+                        .after_inserted(clone!(app  => move |_| {
+                             *app.g.container.lock_mut() = Some(element);
+                        }))
+                    })
+                    .with_node!(element => {
+                        .event(clone!(app => move |_: events::Resize| {
+                            let h = element.offset_height() - 4;
+                            let w = element.offset_width() - 4;
+                            log::debug!("Resizing new height:{} width:{}", h, w);
+                            *app.g.bounds.lock_mut() = Bounds::calculate_bounds(&app.g.admg, h, w);
+                        }))
+
+                    })
                 })
             ])
+
         })
     }
 }

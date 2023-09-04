@@ -1,9 +1,9 @@
 use daggy::{EdgeIndex, NodeIndex};
 use dominator::{clone, events, svg, Dom};
-use futures_signals::signal::Mutable;
+use futures_signals::{map_ref, signal::Mutable};
 use std::sync::Arc;
 
-use crate::{bounds::Bounds, css::PATH_CLASS, graph::Point, svggraph::SvgGraph};
+use crate::{css::PATH_CLASS, graph::Point, svggraph::SvgGraph};
 
 /// vertex type
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -33,10 +33,10 @@ impl SvgEdge {
     fn svg_edge_anchor(
         g: Arc<SvgGraph>,
         v1: NodeIndex,
-        point_v1: &Point,
-        point_v2: &Point,
+        point_v1: &Point<f64>,
+        point_v2: &Point<f64>,
         arrow_head: bool,
-    ) -> Point {
+    ) -> Point<f64> {
         let svg_length = g
             .admg
             .node_weight(v1)
@@ -97,23 +97,22 @@ impl SvgEdge {
     fn svg_edge_anchors(
         edge: Arc<SvgEdge>,
         g: Arc<SvgGraph>,
-        point_v1: &Point,
-        point_v2: &Point,
-        bounds: &Bounds,
-    ) -> (Point, Point) {
+        point_v1: &Point<f64>,
+        point_v2: &Point<f64>,
+    ) -> (Point<f64>, Point<f64>) {
         let edge_info = g.admg.edge_weight(edge.id).unwrap();
         let (v1, v2) = g.admg.edge_endpoints(edge.id).unwrap();
         let edge_type = *edge_info.edge_type.lock_ref();
         let edge_point = edge_info.layout_pos;
 
         let p2 = edge_point
-            .map(|p| bounds.to_svg_coordinates(&p))
+            .map(|p| g.bounds.lock_ref().to_svg_coordinates(&p))
             .unwrap_or(*point_v2);
         let arrow_head = edge_type == EdgeType::Undirected || edge_type == EdgeType::Directed;
         let v1_anchor = SvgEdge::svg_edge_anchor(g.clone(), v1, point_v1, &p2, arrow_head);
 
         let p1 = edge_point
-            .map(|p| bounds.to_svg_coordinates(&p))
+            .map(|p| g.bounds.lock_ref().to_svg_coordinates(&p))
             .unwrap_or(*point_v1);
         let arrow_head = edge_type == EdgeType::Undirected;
         let v2_anchor = SvgEdge::svg_edge_anchor(g, v2, point_v2, &p1, arrow_head);
@@ -121,40 +120,26 @@ impl SvgEdge {
         (v1_anchor, v2_anchor)
     }
 
-    pub fn render(edge: Arc<SvgEdge>, g: Arc<SvgGraph>, bounds: Bounds) -> Dom {
+    fn calculate_arrow(edge: Arc<SvgEdge>, g: Arc<SvgGraph>) -> String {
         let layout_pos = g.admg.edge_weight(edge.id).unwrap().layout_pos;
         let (v1, v2) = g.admg.edge_endpoints(edge.id).unwrap();
         let info_v1 = g.admg.node_weight(v1).unwrap();
         let info_v2 = g.admg.node_weight(v2).unwrap();
 
-        let point_v1 = bounds.to_svg_coordinates(&info_v1.layout_pos);
-        let point_v2 = bounds.to_svg_coordinates(&info_v2.layout_pos);
+        let point_v1 = g
+            .bounds
+            .lock_ref()
+            .to_svg_coordinates(&info_v1.layout_pos.get());
+        let point_v2 = g
+            .bounds
+            .lock_ref()
+            .to_svg_coordinates(&info_v2.layout_pos.get());
 
-        let (anchor_back, anchor_front) =
-            SvgEdge::svg_edge_anchors(edge.clone(), g, &point_v1, &point_v2, &bounds);
-        let line_path = if let Some(p) = layout_pos {
-            let p = bounds.to_svg_coordinates(&p);
-            format!(
-                "M{:.2},{:.2}Q{:.2},{:.2},{:.2},{:.2}",
-                anchor_back.x(),
-                anchor_back.y(),
-                p.x(),
-                p.y(),
-                anchor_front.x(),
-                anchor_front.y()
-            )
-        } else {
-            format!(
-                "M{:.2},{:.2}L{:.2},{:.2}",
-                anchor_back.x(),
-                anchor_back.y(),
-                anchor_front.x(),
-                anchor_front.y()
-            )
-        };
+        let (_anchor_back, anchor_front) =
+            SvgEdge::svg_edge_anchors(edge.clone(), g.clone(), &point_v1, &point_v2);
 
         let sxy = if let Some(p) = layout_pos {
-            bounds.to_svg_coordinates(&p)
+            g.bounds.lock_ref().to_svg_coordinates(&p)
         } else {
             point_v1
         };
@@ -174,26 +159,85 @@ impl SvgEdge {
             }
         };
 
-        let translate = format!(
+        format!(
             "translate({}, {}) rotate({})",
             anchor_front.x(),
             anchor_front.y(),
             afront
-        );
+        )
+    }
+
+    fn calculate_edge(edge: Arc<SvgEdge>, g: Arc<SvgGraph>) -> String {
+        let layout_pos = g.admg.edge_weight(edge.id).unwrap().layout_pos;
+        let (v1, v2) = g.admg.edge_endpoints(edge.id).unwrap();
+        let info_v1 = g.admg.node_weight(v1).unwrap();
+        let info_v2 = g.admg.node_weight(v2).unwrap();
+
+        let point_v1 = g
+            .bounds
+            .lock_ref()
+            .to_svg_coordinates(&info_v1.layout_pos.get());
+        let point_v2 = g
+            .bounds
+            .lock_ref()
+            .to_svg_coordinates(&info_v2.layout_pos.get());
+
+        let (anchor_back, anchor_front) =
+            SvgEdge::svg_edge_anchors(edge.clone(), g.clone(), &point_v1, &point_v2);
+        let line_path = if let Some(p) = layout_pos {
+            let p = g.bounds.lock_ref().to_svg_coordinates(&p);
+            format!(
+                "M{:.2},{:.2}Q{:.2},{:.2},{:.2},{:.2}",
+                anchor_back.x(),
+                anchor_back.y(),
+                p.x(),
+                p.y(),
+                anchor_front.x(),
+                anchor_front.y()
+            )
+        } else {
+            format!(
+                "M{:.2},{:.2}L{:.2},{:.2}",
+                anchor_back.x(),
+                anchor_back.y(),
+                anchor_front.x(),
+                anchor_front.y()
+            )
+        };
+
+        line_path
+    }
+
+    pub fn render(edge: Arc<SvgEdge>, g: Arc<SvgGraph>) -> Dom {
+        let (v1, v2) = g.admg.edge_endpoints(edge.id).unwrap();
+        let info_v1 = g.admg.node_weight(v1).unwrap();
+        let info_v2 = g.admg.node_weight(v2).unwrap();
 
         let children = vec![
             svg!("path", {
                 .attr("stroke-width", "1.5")
                 .attr("fill", "none")
                 .attr("stroke", "black")
-                .attr("d", &line_path)
+                .attr_signal("d", clone!(edge, g => {
+                    map_ref! {
+                    let _v1 = info_v1.layout_pos.signal_cloned(),
+                    let _v2 = info_v2.layout_pos.signal_cloned() => move {
+                        SvgEdge::calculate_edge(edge.clone(), g.clone())
+                    }
+                }}))
             }),
             svg!("path", {
                 .attr("stroke-width", "1.5")
                 .attr("fill", "white")
                 .attr("stroke", "black")
                 .attr("d", "M-1,0L15,5L15,-5Z")
-                .attr("transform", &translate)
+                .attr_signal("transform", clone!(edge, g => {
+                    map_ref! {
+                    let _v1 = info_v1.layout_pos.signal_cloned(),
+                    let _v2 = info_v2.layout_pos.signal_cloned() => move {
+                        SvgEdge::calculate_arrow(edge.clone(), g.clone())
+                    }
+                }}))
             }),
         ];
 

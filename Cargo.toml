@@ -10,7 +10,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 console_error_panic_hook = "0.1"
 daggy = "0.8"
-dominator = "0.5"
+dominator = "0.5.34"
 futures = "0.3"
 futures-signals = "0.3"
 js-sys = "0.3"

@@ -1,8 +1,12 @@
 use std::sync::Arc;
 
 use dominator::{clone, svg, Dom};
-use futures_signals::signal_vec::{MutableVec, SignalVecExt};
+use futures_signals::{
+    signal::Mutable,
+    signal_vec::{MutableVec, SignalVecExt},
+};
 use once_cell::sync::Lazy;
+use web_sys::HtmlElement;
 
 use crate::{
     bounds::{Bounds, VIEWBOX_HEIGHT, VIEWBOX_WIDTH},
@@ -13,8 +17,10 @@ use crate::{
 
 pub struct SvgGraph {
     pub(crate) admg: ADMG,
+    pub(crate) container: Mutable<Option<HtmlElement>>,
     pub(crate) vertexes: MutableVec<Arc<SvgVertex>>,
     pub(crate) edges: MutableVec<Arc<SvgEdge>>,
+    pub(crate) bounds: Mutable<Bounds>,
 }
 
 static VIEWBOX_STR: Lazy<String> =
@@ -32,30 +38,32 @@ impl SvgGraph {
             edges.lock_mut().push_cloned(SvgEdge::new(idx))
         }
 
+        let bounds = Bounds::calculate_bounds(&admg, VIEWBOX_HEIGHT as i32, VIEWBOX_WIDTH as i32);
+
         Arc::new(Self {
             admg,
+            container: Mutable::new(None),
             vertexes,
             edges,
+            bounds: Mutable::new(bounds),
         })
     }
 
     pub fn render(g: Arc<Self>) -> Dom {
-        let bounds = Bounds::calculate_bounds(&g.admg);
-
         svg!("svg", {
             .attr("alt", "ADMG graph")
             .attr("style", "font-family: Arial, sans-serif" )
             .attr("viewBox", &VIEWBOX_STR)
             .children_signal_vec(
                 g.vertexes.signal_vec_cloned()
-                .map(clone!(g, bounds => move |vertex| {
-                    SvgVertex::render(vertex, g.clone(), bounds.clone())
+                .map(clone!(g => move |vertex| {
+                    SvgVertex::render(vertex, g.clone())
                 })
             ))
             .children_signal_vec(
                 g.edges.signal_vec_cloned()
-                .map(clone!(g, bounds => move |edge| {
-                    SvgEdge::render(edge, g.clone(), bounds.clone())
+                .map(clone!(g => move |edge| {
+                    SvgEdge::render(edge, g.clone())
                 }))
             )
         })
