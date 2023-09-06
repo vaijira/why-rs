@@ -42,6 +42,7 @@ impl Bounds {
         min_y -= ypad;
         max_y += ypad;
 
+        log::debug!("New bound with height:{} width:{}", height, width);
         Self {
             min_x,
             max_x,

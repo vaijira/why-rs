@@ -1,6 +1,7 @@
 use std::{iter::once, sync::Arc};
 
 use dominator::{clone, events, html, with_node, Dom};
+use futures_signals::signal::SignalExt;
 use web_sys::HtmlElement;
 
 use crate::bounds::Bounds;
@@ -51,16 +52,19 @@ impl App {
             .children(&mut [
                 html!("div" => HtmlElement, {
                     .class(&*SVG_DIV_CLASS)
-                    .children(&mut [
-                        SvgGraph::render(app.g.clone()),
-                    ])
                     .with_node!(element => {
                         .after_inserted(clone!(app  => move |_| {
                              *app.g.container.lock_mut() = Some(element);
                         }))
                     })
+                    .child_signal(app.g.bounds.signal().map(
+                        clone!(app => move |_| {
+                             log::debug!("Rerendering graph");
+                             Some(SvgGraph::render(app.g.clone()))
+                         })
+                    ))
                     .with_node!(element => {
-                        .event(clone!(app => move |_: events::Resize| {
+                        .global_event(clone!(app => move |_: events::Resize| {
                             let h = element.offset_height() - 4;
                             let w = element.offset_width() - 4;
                             log::debug!("Resizing new height:{} width:{}", h, w);
