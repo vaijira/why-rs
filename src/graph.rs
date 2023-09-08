@@ -51,7 +51,7 @@ impl NodeInfo {
 pub struct EdgeInfo {
     pub(crate) _id: String,
     pub(crate) _weight: u32,
-    pub(crate) layout_pos: Option<Point<f64>>,
+    pub(crate) layout_pos: Mutable<Option<Point<f64>>>,
     pub(crate) edge_type: Mutable<EdgeType>,
 }
 
@@ -61,7 +61,7 @@ impl EdgeInfo {
         EdgeInfo {
             _id: id.to_string(),
             _weight: 1,
-            layout_pos,
+            layout_pos: Mutable::new(layout_pos),
             edge_type: Mutable::new(edge_type),
         }
     }

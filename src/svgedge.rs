@@ -1,5 +1,5 @@
 use daggy::{EdgeIndex, NodeIndex};
-use dominator::{clone, events, svg, Dom};
+use dominator::{clone, events, svg, with_node, Dom};
 use futures_signals::{map_ref, signal::Mutable};
 use std::sync::Arc;
 
@@ -20,6 +20,7 @@ pub enum EdgeType {
 pub struct SvgEdge {
     id: EdgeIndex,
     marked: Mutable<bool>,
+    dragging: Mutable<bool>,
 }
 
 impl SvgEdge {
@@ -27,6 +28,7 @@ impl SvgEdge {
         Arc::new(Self {
             id,
             marked: Mutable::new(false),
+            dragging: Mutable::new(false),
         })
     }
 
@@ -103,7 +105,7 @@ impl SvgEdge {
         let edge_info = g.admg.edge_weight(edge.id).unwrap();
         let (v1, v2) = g.admg.edge_endpoints(edge.id).unwrap();
         let edge_type = *edge_info.edge_type.lock_ref();
-        let edge_point = edge_info.layout_pos;
+        let edge_point = edge_info.layout_pos.get();
 
         let p2 = edge_point
             .map(|p| g.bounds.lock_ref().to_svg_coordinates(&p))
@@ -121,7 +123,7 @@ impl SvgEdge {
     }
 
     fn calculate_arrow(edge: Arc<SvgEdge>, g: Arc<SvgGraph>) -> String {
-        let layout_pos = g.admg.edge_weight(edge.id).unwrap().layout_pos;
+        let layout_pos = g.admg.edge_weight(edge.id).unwrap().layout_pos.get();
         let (v1, v2) = g.admg.edge_endpoints(edge.id).unwrap();
         let info_v1 = g.admg.node_weight(v1).unwrap();
         let info_v2 = g.admg.node_weight(v2).unwrap();
@@ -168,7 +170,7 @@ impl SvgEdge {
     }
 
     fn calculate_edge(edge: Arc<SvgEdge>, g: Arc<SvgGraph>) -> String {
-        let layout_pos = g.admg.edge_weight(edge.id).unwrap().layout_pos;
+        let layout_pos = g.admg.edge_weight(edge.id).unwrap().layout_pos.get();
         let (v1, v2) = g.admg.edge_endpoints(edge.id).unwrap();
         let info_v1 = g.admg.node_weight(v1).unwrap();
         let info_v2 = g.admg.node_weight(v2).unwrap();
@@ -209,6 +211,7 @@ impl SvgEdge {
     }
 
     pub fn render(edge: Arc<SvgEdge>, g: Arc<SvgGraph>) -> Dom {
+        let edge_info = g.admg.edge_weight(edge.id).unwrap();
         let (v1, v2) = g.admg.edge_endpoints(edge.id).unwrap();
         let info_v1 = g.admg.node_weight(v1).unwrap();
         let info_v2 = g.admg.node_weight(v2).unwrap();
@@ -221,7 +224,8 @@ impl SvgEdge {
                 .attr_signal("d", clone!(edge, g => {
                     map_ref! {
                     let _v1 = info_v1.layout_pos.signal_cloned(),
-                    let _v2 = info_v2.layout_pos.signal_cloned() => move {
+                    let _v2 = info_v2.layout_pos.signal_cloned(),
+                    let _edge = edge_info.layout_pos.signal_cloned() => move {
                         SvgEdge::calculate_edge(edge.clone(), g.clone())
                     }
                 }}))
@@ -234,7 +238,8 @@ impl SvgEdge {
                 .attr_signal("transform", clone!(edge, g => {
                     map_ref! {
                     let _v1 = info_v1.layout_pos.signal_cloned(),
-                    let _v2 = info_v2.layout_pos.signal_cloned() => move {
+                    let _v2 = info_v2.layout_pos.signal_cloned(),
+                    let _edge = edge_info.layout_pos.signal_cloned() => move {
                         SvgEdge::calculate_arrow(edge.clone(), g.clone())
                     }
                 }}))
@@ -243,22 +248,37 @@ impl SvgEdge {
 
         svg!("g", {
             .class(&*PATH_CLASS)
-            .attr("style", "cursor: move;" )
+            .attr("style", "cursor: move; touch-action: none;" )
             .children(children)
-            .event(clone!(edge => move |e: events::TouchStart| {
-                edge.marked.set(!edge.marked.get());
+            .event(|e: events::DragStart| {
                 e.prevent_default();
+            })
+            .with_node!(graph_element => {
+                .event(clone!(edge => move |e: events::PointerDown| {
+                    edge.marked.set(!edge.marked.get());
+                    edge.dragging.set_neq(true);
+                    if graph_element.set_pointer_capture(e.pointer_id()).is_err() {
+                        log::error!("Unable to capture pointer id for edge");
+                    }
+                }))
+            })
+            .event(clone!(g, edge => move |e: events::PointerMove| {
+                if edge.dragging.get() {
+                    let info = g.admg.edge_weight(edge.id).unwrap();
+                    log::debug!("Edge PointerMove event x:{} y:{}", e.x() , e.y());
+                    log::debug!("Edge PointerMove event page_x:{} page_y:{}", e.page_x() , e.page_y());
+                    let ptr_x = e.page_x() - g.container.lock_ref().as_ref().map(|element| element.client_left()).unwrap_or(0);
+                    let ptr_y = e.page_y() - g.container.lock_ref().as_ref().map(|element| element.client_top()).unwrap_or(0);
+                    log::debug!("Edge PointerMove event ptr_x:{} ptr_y:{}", ptr_x , ptr_y);
+                    *info.layout_pos.lock_mut() = Some(g.bounds.lock_ref().to_graph_coordinates(&Point::new(ptr_x as f64, ptr_y as f64)));
+                    log::debug!("Edge PointerMove after graph_coordinates x:{} y:{}",
+                                info.layout_pos.lock_ref().unwrap().x() ,
+                                info.layout_pos.lock_ref().unwrap().y());
+                }
             }))
-            .event(|_: events::TouchEnd| {
-            })
-            .event(clone!(edge => move |_: events::MouseDown| {
-                edge.marked.set(!edge.marked.get());
+            .event(clone!(edge => move |_: events::PointerUp| {
+                edge.dragging.set_neq(false);
             }))
-            .event(|_: events::MouseMove| {
-
-            })
-            .event(|_: events::MouseLeave| {
-            })
         })
     }
 }
