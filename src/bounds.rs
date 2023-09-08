@@ -9,8 +9,8 @@ pub struct Bounds {
     max_x: f64,
     min_y: f64,
     max_y: f64,
-    height: f64,
-    width: f64,
+    pub(crate) height: f64,
+    pub(crate) width: f64,
 }
 
 impl Bounds {

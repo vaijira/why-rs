@@ -109,13 +109,13 @@ impl SvgVertex {
             .event(clone!(g, v => move |e: events::PointerMove| {
                 if v.dragging.get() {
                     let info = g.admg.node_weight(v.id).unwrap();
-                    log::trace!("Vertex PointerMove event x:{} y:{}", e.x() , e.y());
-                    log::trace!("Vertex PointerMove event page_x:{} page_y:{}", e.page_x() , e.page_y());
-                    let ptr_x = (e.page_x() - g.container.lock_ref().as_ref().map(|element| element.offset_left()).unwrap_or(0)) / 2;
-                    let ptr_y = (e.page_y() - g.container.lock_ref().as_ref().map(|element| element.offset_top()).unwrap_or(0)) / 2;
-                    log::trace!("Vertex PointerMove event ptr_x:{} ptr_y:{}", ptr_x , ptr_y);
+                    log::debug!("Vertex PointerMove event x:{} y:{}", e.x() , e.y());
+                    log::debug!("Vertex PointerMove event page_x:{} page_y:{}", e.page_x() , e.page_y());
+                    let ptr_x = e.page_x() - g.container.lock_ref().as_ref().map(|element| element.client_left()).unwrap_or(0);
+                    let ptr_y = e.page_y() - g.container.lock_ref().as_ref().map(|element| element.client_top()).unwrap_or(0);
+                    log::debug!("Vertex PointerMove event ptr_x:{} ptr_y:{}", ptr_x , ptr_y);
                     *info.layout_pos.lock_mut() = g.bounds.lock_ref().to_graph_coordinates(&Point::new(ptr_x as f64, ptr_y as f64));
-                    log::trace!("Vertex PointerMove after graph_coordinates x:{} y:{}", info.layout_pos.lock_ref().x() , info.layout_pos.lock_ref().y());
+                    log::debug!("Vertex PointerMove after graph_coordinates x:{} y:{}", info.layout_pos.lock_ref().x() , info.layout_pos.lock_ref().y());
                 }
             }))
             .event(clone!(v => move |_: events::PointerUp| {

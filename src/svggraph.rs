@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use dominator::{clone, svg, Dom};
+use futures_signals::signal::SignalExt;
 use futures_signals::{
     signal::Mutable,
     signal_vec::{MutableVec, SignalVecExt},
 };
-use once_cell::sync::Lazy;
 use web_sys::HtmlElement;
 
 use crate::{
@@ -22,9 +22,6 @@ pub struct SvgGraph {
     pub(crate) edges: MutableVec<Arc<SvgEdge>>,
     pub(crate) bounds: Mutable<Bounds>,
 }
-
-static VIEWBOX_STR: Lazy<String> =
-    Lazy::new(|| format!("0 0 {} {}", VIEWBOX_WIDTH, VIEWBOX_HEIGHT));
 
 impl SvgGraph {
     pub fn new(admg: ADMG) -> Arc<Self> {
@@ -53,7 +50,26 @@ impl SvgGraph {
         svg!("svg", {
             .attr("alt", "ADMG graph")
             .attr("style", "font-family: Arial, sans-serif" )
-            .attr("viewBox", &VIEWBOX_STR)
+            .attr_signal("style", g.bounds.signal().map(
+                clone!(g => move |_| {
+                    log::debug!("setting svg style height: {} width: {}",
+                                g.bounds.get().height, g.bounds.get().width);
+                    format!("font-family: Arial, sans-serif; height: {}; width: {};",
+                            g.bounds.get().height, g.bounds.get().width)
+                 })
+            ))
+            .attr_signal("height", g.bounds.signal().map(
+                clone!(g => move |_| {
+                     log::debug!("setting svg height: {}", g.bounds.get().height);
+                     g.bounds.get().height.to_string()
+                 })
+            ))
+            .attr_signal("width", g.bounds.signal().map(
+                clone!(g => move |_| {
+                     log::debug!("setting svg width: {}", g.bounds.get().height);
+                     g.bounds.get().height.to_string()
+                 })
+            ))
             .children_signal_vec(
                 g.vertexes.signal_vec_cloned()
                 .map(clone!(g => move |vertex| {

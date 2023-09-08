@@ -54,7 +54,7 @@ impl App {
                     .class(&*SVG_DIV_CLASS)
                     .with_node!(element => {
                         .after_inserted(clone!(app  => move |_| {
-                             *app.g.container.lock_mut() = Some(element);
+                            *app.g.container.lock_mut() = Some(element);
                         }))
                     })
                     .child_signal(app.g.bounds.signal().map(
