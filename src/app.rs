@@ -12,7 +12,7 @@ use crate::svgvertex::VertexType;
 use crate::{svggraph::SvgGraph, NodeInfo, ADMG};
 
 pub struct App {
-    g: Arc<SvgGraph>,
+    svg_graph: Arc<SvgGraph>,
 }
 
 impl App {
@@ -42,7 +42,7 @@ impl App {
         example_graph.add_edges(edges).unwrap();
 
         Arc::new(Self {
-            g: SvgGraph::new(example_graph),
+            svg_graph: SvgGraph::new(example_graph),
         })
     }
 
@@ -54,13 +54,13 @@ impl App {
                     .class(&*SVG_DIV_CLASS)
                     .with_node!(element => {
                         .after_inserted(clone!(app  => move |_| {
-                            *app.g.container.lock_mut() = Some(element);
+                            *app.svg_graph.container.lock_mut() = Some(element);
                         }))
                     })
-                    .child_signal(app.g.bounds.signal().map(
+                    .child_signal(app.svg_graph.bounds.signal().map(
                         clone!(app => move |_| {
                              log::debug!("Rerendering graph");
-                             Some(SvgGraph::render(app.g.clone()))
+                             Some(SvgGraph::render(app.svg_graph.clone()))
                          })
                     ))
                     .with_node!(element => {
@@ -68,7 +68,7 @@ impl App {
                             let h = element.offset_height() - 4;
                             let w = element.offset_width() - 4;
                             log::debug!("Resizing new height:{} width:{}", h, w);
-                            *app.g.bounds.lock_mut() = Bounds::calculate_bounds(&app.g.admg, h, w);
+                            *app.svg_graph.bounds.lock_mut() = Bounds::calculate_bounds(&app.svg_graph.admg, h, w);
                         }))
 
                     })
