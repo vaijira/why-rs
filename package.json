@@ -4,8 +4,8 @@
   "name": "why-rs",
   "version": "0.1.0",
   "scripts": {
-    "build": "rimraf dist/js && rollup --config",
-    "start": "rimraf dist/js && rollup --config --watch"
+    "build": "rimraf why-ui/dist/js && rollup --config",
+    "start": "rimraf why-ui/dist/js && rollup --config --watch"
   },
   "dependencies": {},
   "devDependencies": {

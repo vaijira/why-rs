@@ -10,10 +10,10 @@ const is_watch = !!process.env.ROLLUP_WATCH;
 
 export default {
     input: {
-        index: "./Cargo.toml",
+        index: "./why-ui/Cargo.toml",
     },
     output: {
-        dir: "dist/js",
+        dir: "why-ui/dist/js",
         format: "iife",
         sourcemap: true,
     },
@@ -33,11 +33,11 @@ export default {
         commonjs(),
 
         is_watch && serve({
-            contentBase: "dist",
+            contentBase: "why-ui/dist",
             open: true,
         }),
 
-        is_watch && livereload("dist"),
+        is_watch && livereload("why-ui/dist"),
 
         !is_watch && terser(),
     ],
