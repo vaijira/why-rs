@@ -26,12 +26,12 @@ pub struct SvgGraph {
 impl SvgGraph {
     pub fn new(admg: ADMG) -> Arc<Self> {
         let vertexes = MutableVec::new();
-        for idx in admg.graph().node_indices() {
+        for idx in admg.node_indices() {
             vertexes.lock_mut().push_cloned(SvgVertex::new(idx))
         }
 
         let edges = MutableVec::new();
-        for idx in admg.graph().edge_indices() {
+        for idx in admg.edge_indices() {
             edges.lock_mut().push_cloned(SvgEdge::new(idx))
         }
 

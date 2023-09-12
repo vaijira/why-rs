@@ -23,7 +23,7 @@ impl Bounds {
 
         let width = if width > 0 { width as f64 } else { 0.0 };
 
-        for idx in admg.graph().node_indices() {
+        for idx in admg.node_indices() {
             min_x = min_x.min(admg.node_weight(idx).unwrap().layout_pos.get().x());
             max_x = max_x.max(admg.node_weight(idx).unwrap().layout_pos.get().x());
             min_y = min_y.min(admg.node_weight(idx).unwrap().layout_pos.get().y());

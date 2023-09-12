@@ -39,7 +39,9 @@ impl App {
             )))
             .chain(once((e, d, EdgeInfo::new("", None, EdgeType::Directed))));
 
-        example_graph.add_edges(edges).unwrap();
+        for edge in edges {
+            example_graph.add_edge(edge.0, edge.1, edge.2);
+        }
 
         Arc::new(Self {
             svg_graph: SvgGraph::new(example_graph),

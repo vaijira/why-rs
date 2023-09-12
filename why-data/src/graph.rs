@@ -1,0 +1,117 @@
+use std::collections::HashSet;
+use std::fmt::Debug;
+
+pub use petgraph::{
+    graph::{EdgeIndex, NodeIndex},
+    graph::{IndexType, WalkNeighbors},
+    stable_graph::DefaultIx,
+    Directed,
+    Direction::Incoming,
+    EdgeType, Graph,
+};
+
+/// Causal Graph
+pub type CausalGraph<N, E, Ty = Directed, Ix = DefaultIx> = Graph<N, E, Ty, Ix>;
+
+/// Extend Graph with new calls needed by causal graph algorithms.
+pub trait CausalGraphExt<'a, N, E, Ty: EdgeType, Ix: IndexType> {
+    /// Return all ancestors from a given node.
+    fn ancestors(self, node: NodeIndex<Ix>) -> Ancestors<'a, N, E, Ty, Ix>;
+}
+
+/// Ancestors is an structure containing all nodes that are ancestors of a particular one.
+pub struct Ancestors<'a, N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    g: &'a Graph<N, E, Ty, Ix>,
+    visited: HashSet<NodeIndex<Ix>>,
+    pending_neighbors: Vec<WalkNeighbors<Ix>>,
+}
+
+impl<'a, N, E, Ty: EdgeType, Ix: IndexType> Ancestors<'a, N, E, Ty, Ix> {
+    fn new(g: &'a Graph<N, E, Ty, Ix>, node: NodeIndex<Ix>) -> Self {
+        Self {
+            g,
+            visited: HashSet::from([node]),
+            pending_neighbors: vec![g.neighbors_directed(node, Incoming).detach()],
+        }
+    }
+}
+
+impl<'a, N, E, Ty: EdgeType, Ix: IndexType> Debug for Ancestors<'a, N, E, Ty, Ix> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Ancestors visited: {:?}", self.visited)
+    }
+}
+
+impl<'a, N, E, Ty: EdgeType, Ix: IndexType> Iterator for Ancestors<'a, N, E, Ty, Ix> {
+    type Item = NodeIndex<Ix>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pending_neighbors.is_empty() {
+            None
+        } else {
+            let mut found = None;
+            while let Some(mut neighbors) = self.pending_neighbors.pop() {
+                while let Some(edge) = neighbors.next(self.g) {
+                    if !self.visited.contains(&edge.1) {
+                        found = Some(edge.1);
+                        self.visited.insert(edge.1);
+                        break;
+                    }
+                }
+                if let Some(node) = found {
+                    self.pending_neighbors
+                        .push(self.g.neighbors_directed(node, Incoming).detach());
+                    self.pending_neighbors.insert(0, neighbors);
+                    break;
+                }
+            }
+            found
+        }
+    }
+}
+
+impl<'a, N, E: 'a, Ty, Ix> CausalGraphExt<'a, N, E, Ty, Ix> for &'a CausalGraph<N, E, Ty, Ix>
+where
+    Ty: EdgeType,
+    Ix: IndexType,
+{
+    fn ancestors(self, node: NodeIndex<Ix>) -> Ancestors<'a, N, E, Ty, Ix> {
+        // self.neighbors_directed(node, dir)
+        Ancestors::new(self, node)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+
+    #[test]
+    fn test_ancestors() {
+        let mut g = CausalGraph::<&str, &str>::new();
+
+        let a = g.add_node("A");
+        let b = g.add_node("B");
+        let d = g.add_node("D");
+        let e = g.add_node("E");
+        let z = g.add_node("Z");
+
+        g.add_edge(a, e, "");
+        g.add_edge(a, z, "");
+        g.add_edge(b, d, "");
+        g.add_edge(b, z, "");
+        g.add_edge(e, d, "");
+
+        let mut iter = g.ancestors(a).into_iter();
+
+        assert_eq!(None, iter.next());
+
+        let iter = g.ancestors(z).into_iter();
+        let nodes = iter.collect::<HashSet<NodeIndex>>();
+        assert_eq!(HashSet::from([a, b]), nodes);
+    }
+}

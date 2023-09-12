@@ -20,9 +20,10 @@ use app::App;
 
 use graph::{EdgeInfo, NodeInfo};
 use wasm_bindgen::prelude::*;
+use why_data::graph::CausalGraph;
 
 /// Default type for graphs
-pub type ADMG = daggy::Dag<NodeInfo, EdgeInfo, u32>;
+pub type ADMG = CausalGraph<NodeInfo, EdgeInfo>;
 
 #[wasm_bindgen(start)]
 /// Main entry point for why-rs app

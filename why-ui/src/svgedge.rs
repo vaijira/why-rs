@@ -1,9 +1,8 @@
-use daggy::{EdgeIndex, NodeIndex};
+use crate::{css::PATH_CLASS, graph::Point, svggraph::SvgGraph};
 use dominator::{clone, events, svg, with_node, Dom};
 use futures_signals::{map_ref, signal::Mutable};
 use std::sync::Arc;
-
-use crate::{css::PATH_CLASS, graph::Point, svggraph::SvgGraph};
+use why_data::graph::{EdgeIndex, NodeIndex};
 
 /// vertex type
 #[derive(Clone, Copy, Debug, PartialEq)]
