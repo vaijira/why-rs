@@ -16,7 +16,7 @@ node_modules
 yarn.lock
 
 # Ignore generated wasm and js
-/dist/js/
+*/dist/js/
 
 # Ignore vscode
 .vscode
