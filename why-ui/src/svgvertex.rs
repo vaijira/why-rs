@@ -2,9 +2,9 @@ use dominator::{clone, events, svg, with_node, Dom};
 use futures_signals::signal::Mutable;
 use std::sync::Arc;
 use web_sys::{SvgGraphicsElement, SvgPathElement};
-use why_data::graph::NodeIndex;
+use why_data::{graph::NodeIndex, types::Point};
 
-use crate::{graph::Point, svggraph::SvgGraph};
+use crate::svggraph::SvgGraph;
 
 /// vertex type
 #[derive(Debug)]

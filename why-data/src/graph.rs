@@ -16,7 +16,10 @@ pub type CausalGraph<N, E, Ty = Directed, Ix = DefaultIx> = Graph<N, E, Ty, Ix>;
 /// Extend Graph with new calls needed by causal graph algorithms.
 pub trait CausalGraphExt<'a, N, E, Ty: EdgeType, Ix: IndexType> {
     /// Return all ancestors from a given node.
-    fn ancestors(self, node: NodeIndex<Ix>) -> Ancestors<'a, N, E, Ty, Ix>;
+    fn ancestors(&'a self, node: NodeIndex<Ix>) -> Ancestors<'a, N, E, Ty, Ix>;
+
+    /// Add edges
+    fn add_edges(&mut self, edges: impl Iterator<Item = (NodeIndex<Ix>, NodeIndex<Ix>, E)>);
 }
 
 /// Ancestors is an structure containing all nodes that are ancestors of a particular one.
@@ -74,14 +77,19 @@ impl<'a, N, E, Ty: EdgeType, Ix: IndexType> Iterator for Ancestors<'a, N, E, Ty,
     }
 }
 
-impl<'a, N, E: 'a, Ty, Ix> CausalGraphExt<'a, N, E, Ty, Ix> for &'a CausalGraph<N, E, Ty, Ix>
+impl<'a, N, E, Ty, Ix> CausalGraphExt<'a, N, E, Ty, Ix> for CausalGraph<N, E, Ty, Ix>
 where
     Ty: EdgeType,
     Ix: IndexType,
 {
-    fn ancestors(self, node: NodeIndex<Ix>) -> Ancestors<'a, N, E, Ty, Ix> {
-        // self.neighbors_directed(node, dir)
+    fn ancestors(&'a self, node: NodeIndex<Ix>) -> Ancestors<'a, N, E, Ty, Ix> {
         Ancestors::new(self, node)
+    }
+
+    fn add_edges(&mut self, edges: impl Iterator<Item = (NodeIndex<Ix>, NodeIndex<Ix>, E)>) {
+        for edge in edges {
+            self.add_edge(edge.0, edge.1, edge.2);
+        }
     }
 }
 

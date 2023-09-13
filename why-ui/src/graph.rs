@@ -1,27 +1,8 @@
 use futures_signals::signal::Mutable;
+use why_data::types::Point;
 
 use crate::svgedge::EdgeType;
 use crate::svgvertex::VertexType;
-
-#[derive(Clone, Copy, Debug)]
-pub struct Point<T: Copy> {
-    x: T,
-    y: T,
-}
-
-impl<T: Copy> Point<T> {
-    pub fn new(x: T, y: T) -> Self {
-        Self { x, y }
-    }
-
-    pub fn x(&self) -> T {
-        self.x
-    }
-
-    pub fn y(&self) -> T {
-        self.y
-    }
-}
 
 /// Node information to represent a vertex.
 #[derive(Debug)]

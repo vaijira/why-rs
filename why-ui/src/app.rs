@@ -3,10 +3,12 @@ use std::{iter::once, sync::Arc};
 use dominator::{clone, events, html, with_node, Dom};
 use futures_signals::signal::SignalExt;
 use web_sys::HtmlElement;
+use why_data::graph::CausalGraphExt;
+use why_data::types::Point;
 
 use crate::bounds::Bounds;
 use crate::css::{MAIN_CLASS, SVG_DIV_CLASS};
-use crate::graph::{EdgeInfo, Point};
+use crate::graph::EdgeInfo;
 use crate::svgedge::EdgeType;
 use crate::svgvertex::VertexType;
 use crate::{svggraph::SvgGraph, NodeInfo, ADMG};
@@ -39,9 +41,7 @@ impl App {
             )))
             .chain(once((e, d, EdgeInfo::new("", None, EdgeType::Directed))));
 
-        for edge in edges {
-            example_graph.add_edge(edge.0, edge.1, edge.2);
-        }
+        example_graph.add_edges(edges);
 
         Arc::new(Self {
             svg_graph: SvgGraph::new(example_graph),

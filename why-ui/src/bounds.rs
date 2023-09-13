@@ -1,4 +1,6 @@
-use crate::{graph::Point, ADMG};
+use why_data::types::Point;
+
+use crate::ADMG;
 
 pub(crate) const VIEWBOX_WIDTH: u32 = 764;
 pub(crate) const VIEWBOX_HEIGHT: u32 = 764;
