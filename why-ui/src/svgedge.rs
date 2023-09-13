@@ -13,7 +13,7 @@ pub enum EdgeType {
     /// Directed
     Directed,
     /// Bidirected
-    Bidirected,
+    _Bidirected,
     /// Undirected
     Undirected,
 }
@@ -35,14 +35,14 @@ impl SvgEdge {
     }
 
     fn svg_edge_anchor(
-        g: Arc<SvgGraph>,
+        svg_graph: Arc<SvgGraph>,
         v1: NodeIndex,
         point_v1: &Point<f64>,
         point_v2: &Point<f64>,
         arrow_head: bool,
     ) -> Point<f64> {
-        let svg_length = g
-            .admg
+        let svg_length = svg_graph
+            .graph
             .node_weight(v1)
             .unwrap()
             .vertex_path_element
@@ -57,7 +57,8 @@ impl SvgEdge {
         let length = if length < 0.01 { 0.01 } else { length };
 
         let svg_point = if dy > 0.0 {
-            g.admg
+            svg_graph
+                .graph
                 .node_weight(v1)
                 .unwrap()
                 .vertex_path_element
@@ -70,7 +71,8 @@ impl SvgEdge {
                     )
                 })
         } else {
-            g.admg
+            svg_graph
+                .graph
                 .node_weight(v1)
                 .unwrap()
                 .vertex_path_element
@@ -100,50 +102,55 @@ impl SvgEdge {
 
     fn svg_edge_anchors(
         edge: Arc<SvgEdge>,
-        g: Arc<SvgGraph>,
+        svg_graph: Arc<SvgGraph>,
         point_v1: &Point<f64>,
         point_v2: &Point<f64>,
     ) -> (Point<f64>, Point<f64>) {
-        let edge_info = g.admg.edge_weight(edge.id).unwrap();
-        let (v1, v2) = g.admg.edge_endpoints(edge.id).unwrap();
+        let edge_info = svg_graph.graph.edge_weight(edge.id).unwrap();
+        let (v1, v2) = svg_graph.graph.edge_endpoints(edge.id).unwrap();
         let edge_type = *edge_info.edge_type.lock_ref();
         let edge_point = edge_info.layout_pos.get();
 
         let p2 = edge_point
-            .map(|p| g.bounds.lock_ref().to_svg_coordinates(&p))
+            .map(|p| svg_graph.bounds.lock_ref().to_svg_coordinates(&p))
             .unwrap_or(*point_v2);
         let arrow_head = edge_type == EdgeType::Undirected || edge_type == EdgeType::Directed;
-        let v1_anchor = SvgEdge::svg_edge_anchor(g.clone(), v1, point_v1, &p2, arrow_head);
+        let v1_anchor = SvgEdge::svg_edge_anchor(svg_graph.clone(), v1, point_v1, &p2, arrow_head);
 
         let p1 = edge_point
-            .map(|p| g.bounds.lock_ref().to_svg_coordinates(&p))
+            .map(|p| svg_graph.bounds.lock_ref().to_svg_coordinates(&p))
             .unwrap_or(*point_v1);
         let arrow_head = edge_type == EdgeType::Undirected;
-        let v2_anchor = SvgEdge::svg_edge_anchor(g, v2, point_v2, &p1, arrow_head);
+        let v2_anchor = SvgEdge::svg_edge_anchor(svg_graph, v2, point_v2, &p1, arrow_head);
 
         (v1_anchor, v2_anchor)
     }
 
-    fn calculate_arrow(edge: Arc<SvgEdge>, g: Arc<SvgGraph>) -> String {
-        let layout_pos = g.admg.edge_weight(edge.id).unwrap().layout_pos.get();
-        let (v1, v2) = g.admg.edge_endpoints(edge.id).unwrap();
-        let info_v1 = g.admg.node_weight(v1).unwrap();
-        let info_v2 = g.admg.node_weight(v2).unwrap();
+    fn calculate_arrow(edge: Arc<SvgEdge>, svg_graph: Arc<SvgGraph>) -> String {
+        let layout_pos = svg_graph
+            .graph
+            .edge_weight(edge.id)
+            .unwrap()
+            .layout_pos
+            .get();
+        let (v1, v2) = svg_graph.graph.edge_endpoints(edge.id).unwrap();
+        let info_v1 = svg_graph.graph.node_weight(v1).unwrap();
+        let info_v2 = svg_graph.graph.node_weight(v2).unwrap();
 
-        let point_v1 = g
+        let point_v1 = svg_graph
             .bounds
             .lock_ref()
             .to_svg_coordinates(&info_v1.layout_pos.get());
-        let point_v2 = g
+        let point_v2 = svg_graph
             .bounds
             .lock_ref()
             .to_svg_coordinates(&info_v2.layout_pos.get());
 
         let (_anchor_back, anchor_front) =
-            SvgEdge::svg_edge_anchors(edge.clone(), g.clone(), &point_v1, &point_v2);
+            SvgEdge::svg_edge_anchors(edge.clone(), svg_graph.clone(), &point_v1, &point_v2);
 
         let sxy = if let Some(p) = layout_pos {
-            g.bounds.lock_ref().to_svg_coordinates(&p)
+            svg_graph.bounds.lock_ref().to_svg_coordinates(&p)
         } else {
             point_v1
         };
@@ -171,25 +178,30 @@ impl SvgEdge {
         )
     }
 
-    fn calculate_edge(edge: Arc<SvgEdge>, g: Arc<SvgGraph>) -> String {
-        let layout_pos = g.admg.edge_weight(edge.id).unwrap().layout_pos.get();
-        let (v1, v2) = g.admg.edge_endpoints(edge.id).unwrap();
-        let info_v1 = g.admg.node_weight(v1).unwrap();
-        let info_v2 = g.admg.node_weight(v2).unwrap();
+    fn calculate_edge(edge: Arc<SvgEdge>, svg_graph: Arc<SvgGraph>) -> String {
+        let layout_pos = svg_graph
+            .graph
+            .edge_weight(edge.id)
+            .unwrap()
+            .layout_pos
+            .get();
+        let (v1, v2) = svg_graph.graph.edge_endpoints(edge.id).unwrap();
+        let info_v1 = svg_graph.graph.node_weight(v1).unwrap();
+        let info_v2 = svg_graph.graph.node_weight(v2).unwrap();
 
-        let point_v1 = g
+        let point_v1 = svg_graph
             .bounds
             .lock_ref()
             .to_svg_coordinates(&info_v1.layout_pos.get());
-        let point_v2 = g
+        let point_v2 = svg_graph
             .bounds
             .lock_ref()
             .to_svg_coordinates(&info_v2.layout_pos.get());
 
         let (anchor_back, anchor_front) =
-            SvgEdge::svg_edge_anchors(edge.clone(), g.clone(), &point_v1, &point_v2);
+            SvgEdge::svg_edge_anchors(edge.clone(), svg_graph.clone(), &point_v1, &point_v2);
         let line_path = if let Some(p) = layout_pos {
-            let p = g.bounds.lock_ref().to_svg_coordinates(&p);
+            let p = svg_graph.bounds.lock_ref().to_svg_coordinates(&p);
             format!(
                 "M{:.2},{:.2}Q{:.2},{:.2},{:.2},{:.2}",
                 anchor_back.x(),
@@ -212,23 +224,23 @@ impl SvgEdge {
         line_path
     }
 
-    pub fn render(edge: Arc<SvgEdge>, g: Arc<SvgGraph>) -> Dom {
-        let edge_info = g.admg.edge_weight(edge.id).unwrap();
-        let (v1, v2) = g.admg.edge_endpoints(edge.id).unwrap();
-        let info_v1 = g.admg.node_weight(v1).unwrap();
-        let info_v2 = g.admg.node_weight(v2).unwrap();
+    pub fn render(edge: Arc<SvgEdge>, svg_graph: Arc<SvgGraph>) -> Dom {
+        let edge_info = svg_graph.graph.edge_weight(edge.id).unwrap();
+        let (v1, v2) = svg_graph.graph.edge_endpoints(edge.id).unwrap();
+        let info_v1 = svg_graph.graph.node_weight(v1).unwrap();
+        let info_v2 = svg_graph.graph.node_weight(v2).unwrap();
 
         let children = vec![
             svg!("path", {
                 .attr("stroke-width", "1.5")
                 .attr("fill", "none")
                 .attr("stroke", "black")
-                .attr_signal("d", clone!(edge, g => {
+                .attr_signal("d", clone!(edge, svg_graph => {
                     map_ref! {
                     let _v1 = info_v1.layout_pos.signal_cloned(),
                     let _v2 = info_v2.layout_pos.signal_cloned(),
                     let _edge = edge_info.layout_pos.signal_cloned() => move {
-                        SvgEdge::calculate_edge(edge.clone(), g.clone())
+                        SvgEdge::calculate_edge(edge.clone(), svg_graph.clone())
                     }
                 }}))
             }),
@@ -237,12 +249,12 @@ impl SvgEdge {
                 .attr("fill", "white")
                 .attr("stroke", "black")
                 .attr("d", "M-1,0L15,5L15,-5Z")
-                .attr_signal("transform", clone!(edge, g => {
+                .attr_signal("transform", clone!(edge, svg_graph => {
                     map_ref! {
                     let _v1 = info_v1.layout_pos.signal_cloned(),
                     let _v2 = info_v2.layout_pos.signal_cloned(),
                     let _edge = edge_info.layout_pos.signal_cloned() => move {
-                        SvgEdge::calculate_arrow(edge.clone(), g.clone())
+                        SvgEdge::calculate_arrow(edge.clone(), svg_graph.clone())
                     }
                 }}))
             }),
@@ -264,15 +276,15 @@ impl SvgEdge {
                     }
                 }))
             })
-            .event(clone!(g, edge => move |e: events::PointerMove| {
+            .event(clone!(svg_graph, edge => move |e: events::PointerMove| {
                 if edge.dragging.get() {
-                    let info = g.admg.edge_weight(edge.id).unwrap();
+                    let info = svg_graph.graph.edge_weight(edge.id).unwrap();
                     log::debug!("Edge PointerMove event x:{} y:{}", e.x() , e.y());
                     log::debug!("Edge PointerMove event page_x:{} page_y:{}", e.page_x() , e.page_y());
-                    let ptr_x = e.page_x() - g.container.lock_ref().as_ref().map(|element| element.client_left()).unwrap_or(0);
-                    let ptr_y = e.page_y() - g.container.lock_ref().as_ref().map(|element| element.client_top()).unwrap_or(0);
+                    let ptr_x = e.page_x() - svg_graph.container.lock_ref().as_ref().map(|element| element.client_left()).unwrap_or(0);
+                    let ptr_y = e.page_y() - svg_graph.container.lock_ref().as_ref().map(|element| element.client_top()).unwrap_or(0);
                     log::debug!("Edge PointerMove event ptr_x:{} ptr_y:{}", ptr_x , ptr_y);
-                    *info.layout_pos.lock_mut() = Some(g.bounds.lock_ref().to_graph_coordinates(&Point::new(ptr_x as f64, ptr_y as f64)));
+                    *info.layout_pos.lock_mut() = Some(svg_graph.bounds.lock_ref().to_graph_coordinates(&Point::new(ptr_x as f64, ptr_y as f64)));
                     log::debug!("Edge PointerMove after graph_coordinates x:{} y:{}",
                                 info.layout_pos.lock_ref().unwrap().x() ,
                                 info.layout_pos.lock_ref().unwrap().y());

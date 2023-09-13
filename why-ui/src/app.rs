@@ -3,15 +3,15 @@ use std::{iter::once, sync::Arc};
 use dominator::{clone, events, html, with_node, Dom};
 use futures_signals::signal::SignalExt;
 use web_sys::HtmlElement;
-use why_data::graph::CausalGraphExt;
+use why_data::graph::{CausalGraph, CausalGraphExt};
 use why_data::types::Point;
 
 use crate::bounds::Bounds;
 use crate::css::{MAIN_CLASS, SVG_DIV_CLASS};
-use crate::graph::EdgeInfo;
+use crate::graph::{EdgeInfo, NodeInfo};
 use crate::svgedge::EdgeType;
+use crate::svggraph::SvgGraph;
 use crate::svgvertex::VertexType;
-use crate::{svggraph::SvgGraph, NodeInfo, ADMG};
 
 pub struct App {
     svg_graph: Arc<SvgGraph>,
@@ -19,7 +19,7 @@ pub struct App {
 
 impl App {
     pub fn new() -> Arc<Self> {
-        let mut example_graph = ADMG::new();
+        let mut example_graph = CausalGraph::<NodeInfo, EdgeInfo>::new();
 
         let a = example_graph.add_node(NodeInfo::new("A", -2.2, -1.52, VertexType::None));
         let b = example_graph.add_node(NodeInfo::new("B", 1.4, -1.46, VertexType::None));
@@ -70,7 +70,7 @@ impl App {
                             let h = element.offset_height() - 4;
                             let w = element.offset_width() - 4;
                             log::debug!("Resizing new height:{} width:{}", h, w);
-                            *app.svg_graph.bounds.lock_mut() = Bounds::calculate_bounds(&app.svg_graph.admg, h, w);
+                            *app.svg_graph.bounds.lock_mut() = Bounds::calculate_bounds(&app.svg_graph.graph, h, w);
                         }))
 
                     })

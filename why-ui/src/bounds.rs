@@ -1,6 +1,6 @@
-use why_data::types::Point;
+use why_data::{graph::CausalGraph, types::Point};
 
-use crate::ADMG;
+use crate::graph::{EdgeInfo, NodeInfo};
 
 pub(crate) const VIEWBOX_WIDTH: u32 = 764;
 pub(crate) const VIEWBOX_HEIGHT: u32 = 764;
@@ -16,7 +16,11 @@ pub struct Bounds {
 }
 
 impl Bounds {
-    pub(crate) fn calculate_bounds(admg: &ADMG, height: i32, width: i32) -> Self {
+    pub(crate) fn calculate_bounds(
+        graph: &CausalGraph<NodeInfo, EdgeInfo>,
+        height: i32,
+        width: i32,
+    ) -> Self {
         let mut min_x = f64::MAX;
         let mut max_x = f64::MIN;
         let mut min_y = f64::MAX;
@@ -25,11 +29,11 @@ impl Bounds {
 
         let width = if width > 0 { width as f64 } else { 0.0 };
 
-        for idx in admg.node_indices() {
-            min_x = min_x.min(admg.node_weight(idx).unwrap().layout_pos.get().x());
-            max_x = max_x.max(admg.node_weight(idx).unwrap().layout_pos.get().x());
-            min_y = min_y.min(admg.node_weight(idx).unwrap().layout_pos.get().y());
-            max_y = max_y.max(admg.node_weight(idx).unwrap().layout_pos.get().y());
+        for idx in graph.node_indices() {
+            min_x = min_x.min(graph.node_weight(idx).unwrap().layout_pos.get().x());
+            max_x = max_x.max(graph.node_weight(idx).unwrap().layout_pos.get().x());
+            min_y = min_y.min(graph.node_weight(idx).unwrap().layout_pos.get().y());
+            max_y = max_y.max(graph.node_weight(idx).unwrap().layout_pos.get().y());
         }
         if max_x == min_x {
             max_x = min_x + 1.0
