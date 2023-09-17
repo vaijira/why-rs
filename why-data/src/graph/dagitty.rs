@@ -1,17 +1,41 @@
+use crate::types::Point;
 use futures_signals::signal::Mutable;
-use why_data::types::Point;
 
-use crate::svgedge::EdgeType;
-use crate::svgvertex::VertexType;
+/// vertex type
+#[derive(Debug)]
+pub enum VertexType {
+    /// Default vertex type
+    None,
+    /// Outcome vertex
+    Outcome,
+    /// Exposure vertex
+    Exposure,
+}
+
+/// edge type
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum EdgeType {
+    /// Directed
+    Directed,
+    /// Bidirected
+    _Bidirected,
+    /// Undirected
+    Undirected,
+}
 
 /// Node information to represent a vertex.
 #[derive(Debug)]
 pub struct NodeInfo {
-    pub(crate) id: String,
-    pub(crate) _weight: u32,
-    pub(crate) layout_pos: Mutable<Point<f64>>,
-    pub(crate) vertex_type: Mutable<VertexType>,
-    pub(crate) vertex_path_element: Mutable<Option<web_sys::SvgPathElement>>,
+    /// Node identifier.
+    pub id: String,
+    /// Node wight.
+    pub _weight: u32,
+    /// Node layout position.
+    pub layout_pos: Mutable<Point<f64>>,
+    /// Vertex type.
+    pub vertex_type: Mutable<VertexType>,
+    /// Vertex path element.
+    pub vertex_path_element: Mutable<Option<web_sys::SvgPathElement>>,
 }
 
 impl NodeInfo {
@@ -30,10 +54,14 @@ impl NodeInfo {
 /// Edge information to represent a edge.
 #[derive(Debug)]
 pub struct EdgeInfo {
-    pub(crate) _id: String,
-    pub(crate) _weight: u32,
-    pub(crate) layout_pos: Mutable<Option<Point<f64>>>,
-    pub(crate) edge_type: Mutable<EdgeType>,
+    /// Edge identifier.
+    pub _id: String,
+    /// Edge weight.
+    pub _weight: u32,
+    /// Edge layout position.
+    pub layout_pos: Mutable<Option<Point<f64>>>,
+    /// Edge type.
+    pub edge_type: Mutable<EdgeType>,
 }
 
 impl EdgeInfo {

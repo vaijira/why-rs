@@ -18,6 +18,7 @@ once_cell = "1.7"
 wasm-bindgen = "0.2"
 wasm-logger = "0.2"
 why-data =  { path = "../why-data" }
+why-parser =  { path = "../why-parser" }
 
 [dependencies.web-sys]
 version = "0.3"

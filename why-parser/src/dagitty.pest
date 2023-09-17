@@ -1,0 +1,44 @@
+dagitty_graph = { STRICT? ~ GRAPHTYPE ~ IDENTIFIER? ~ "{" ~ stmt_list ~ "}" }
+
+STRICT = { ^"strict" }
+GRAPHTYPE = { ( ^"graph" | ^"digraph" | ^"dag" | ^"mag" | ^"pdag" | ^"pag") }
+
+stmt_list = { ( stmt ~ ";"? ~ stmt_list )? }
+
+stmt = { edge_stmt | global_option  | node_stmt }
+
+global_option = { id_eq }
+
+attr_list = { "[" ~ a_list ~ "]" ~ attr_list? }
+
+a_list = { (id_eq | IDENTIFIER) ~ ( ";" | "," )? ~ a_list? }
+
+edge_stmt = { (node_id) ~ edge_rhs ~ attr_list? }
+
+edge_rhs = { edgeop ~ (node_id) ~ edge_rhs? }
+
+node_stmt = { node_id ~ attr_list? }
+
+node_id = { IDENTIFIER }
+
+id_eq = { IDENTIFIER ~ "=" ~ IDENTIFIER }
+
+edgeop = _{ "@->" | "<-@" | "->" | "--@" | "--" | "<->" | "<-" | "@-@" | "@--" }
+
+not_quote = { !("\"") ~ ANY }
+
+not_lt_gt = { !("<" | ">") ~ ANY }
+
+ident1 = _{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+numeral = _{ "-"? ~ ( ("." ~ ASCII_DIGIT+) | ( ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT*)? ) ) }
+
+quote = _{ "\"" ~ ( ("\\\"") | not_quote)+ ~ "\"" }
+
+html = _{ "<" ~ not_lt_gt+ ~ ">" }
+
+IDENTIFIER = @{ ident1 | numeral | quote | html }
+
+COMMENT = _{ ("/*" ~ (!"*/" ~ ANY)* ~ "*/" | "#" ~ (!NEWLINE ~ ANY)* ~ NEWLINE | "//" ~ (!NEWLINE ~ ANY)* ~ NEWLINE) }
+
+WHITESPACE = _{ " " | "\t" | NEWLINE }

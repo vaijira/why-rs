@@ -2,20 +2,12 @@ use dominator::{clone, events, svg, with_node, Dom};
 use futures_signals::signal::Mutable;
 use std::sync::Arc;
 use web_sys::{SvgGraphicsElement, SvgPathElement};
-use why_data::{graph::NodeIndex, types::Point};
+use why_data::{
+    graph::{dagitty::VertexType, NodeIndex},
+    types::Point,
+};
 
 use crate::svggraph::SvgGraph;
-
-/// vertex type
-#[derive(Debug)]
-pub enum VertexType {
-    /// Default vertex type
-    None,
-    /// Outcome vertex
-    Outcome,
-    /// Exposure vertex
-    Exposure,
-}
 #[derive(Clone, Debug)]
 pub struct SvgVertex {
     id: NodeIndex,

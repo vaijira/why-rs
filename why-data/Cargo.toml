@@ -5,4 +5,12 @@ authors = ["Jorge Perez Burgos <vaijira@gmail.com>"]
 edition = "2021"
 
 [dependencies]
+futures-signals = "0.3"
 petgraph = "0.6"
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+    "SvgPathElement",
+]
+

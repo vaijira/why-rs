@@ -2,21 +2,11 @@ use crate::{css::PATH_CLASS, svggraph::SvgGraph};
 use dominator::{clone, events, svg, with_node, Dom};
 use futures_signals::{map_ref, signal::Mutable};
 use std::sync::Arc;
+use why_data::graph::dagitty::EdgeType;
 use why_data::{
     graph::{EdgeIndex, NodeIndex},
     types::Point,
 };
-
-/// vertex type
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum EdgeType {
-    /// Directed
-    Directed,
-    /// Bidirected
-    _Bidirected,
-    /// Undirected
-    Undirected,
-}
 
 #[derive(Clone, Debug)]
 pub struct SvgEdge {

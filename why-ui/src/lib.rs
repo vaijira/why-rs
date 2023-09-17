@@ -11,7 +11,6 @@
 mod app;
 mod bounds;
 mod css;
-mod graph;
 mod svgedge;
 mod svggraph;
 mod svgvertex;

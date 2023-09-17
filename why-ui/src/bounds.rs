@@ -1,6 +1,10 @@
-use why_data::{graph::CausalGraph, types::Point};
-
-use crate::graph::{EdgeInfo, NodeInfo};
+use why_data::{
+    graph::{
+        dagitty::{EdgeInfo, NodeInfo},
+        CausalGraph,
+    },
+    types::Point,
+};
 
 pub(crate) const VIEWBOX_WIDTH: u32 = 764;
 pub(crate) const VIEWBOX_HEIGHT: u32 = 764;

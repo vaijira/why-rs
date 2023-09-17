@@ -7,9 +7,9 @@ use futures_signals::{
     signal_vec::{MutableVec, SignalVecExt},
 };
 use web_sys::HtmlElement;
+use why_data::graph::dagitty::{EdgeInfo, NodeInfo};
 use why_data::graph::CausalGraph;
 
-use crate::graph::{EdgeInfo, NodeInfo};
 use crate::{
     bounds::{Bounds, VIEWBOX_HEIGHT, VIEWBOX_WIDTH},
     svgedge::SvgEdge,

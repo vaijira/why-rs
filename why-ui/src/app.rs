@@ -3,15 +3,13 @@ use std::{iter::once, sync::Arc};
 use dominator::{clone, events, html, with_node, Dom};
 use futures_signals::signal::SignalExt;
 use web_sys::HtmlElement;
+use why_data::graph::dagitty::{EdgeInfo, EdgeType, NodeInfo, VertexType};
 use why_data::graph::{CausalGraph, CausalGraphExt};
 use why_data::types::Point;
 
 use crate::bounds::Bounds;
 use crate::css::{MAIN_CLASS, SVG_DIV_CLASS};
-use crate::graph::{EdgeInfo, NodeInfo};
-use crate::svgedge::EdgeType;
 use crate::svggraph::SvgGraph;
-use crate::svgvertex::VertexType;
 
 pub struct App {
     svg_graph: Arc<SvgGraph>,
