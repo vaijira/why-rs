@@ -1,9 +1,9 @@
 use dominator::{clone, events, svg, with_node, Dom};
 use futures_signals::signal::Mutable;
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 use web_sys::{SvgGraphicsElement, SvgPathElement};
 use why_data::{
-    graph::{dagitty::VertexType, NodeIndex},
+    graph::{dagitty::VertexType, CausalGraph, NodeIndex},
     types::Point,
 };
 
@@ -32,8 +32,11 @@ impl SvgVertex {
         })
     }
 
-    pub fn render(v: Arc<SvgVertex>, svg_graph: Arc<SvgGraph>) -> Dom {
-        let info = svg_graph.graph.node_weight(v.id).unwrap();
+    pub fn render(v: Arc<SvgVertex>, svg_graph: Rc<SvgGraph>) -> Dom {
+        let info = match &svg_graph.graph {
+            CausalGraph::Dag(g) => g.node_weight(v.id).unwrap(),
+            _ => unimplemented!(),
+        };
 
         let children = vec![
             svg!("path" => SvgPathElement, {
@@ -63,7 +66,10 @@ impl SvgVertex {
                 .attr("d", "M 0 0 m 20, 0 a 20,15 0 1,1 -40,0 a 20,15 0 1,1 40,0")
                 .with_node!(path_element => {
                     .after_inserted(clone!(svg_graph, v  => move |_| {
-                         *svg_graph.graph.node_weight(v.id).unwrap().vertex_path_element.lock_mut() = Some(path_element);
+                        match &svg_graph.graph {
+                            CausalGraph::Dag(g) => *g.node_weight(v.id).unwrap().vertex_path_element.lock_mut() = Some(path_element),
+                            _ => unimplemented!(),
+                        };
                     }))
                 })
             }),
@@ -99,7 +105,10 @@ impl SvgVertex {
             })
             .event(clone!(svg_graph, v => move |e: events::PointerMove| {
                 if v.dragging.get() {
-                    let info = svg_graph.graph.node_weight(v.id).unwrap();
+                    let info = match &svg_graph.graph {
+                        CausalGraph::Dag(g) => g.node_weight(v.id).unwrap(),
+                        _ => unimplemented!(),
+                    };
 
                     log::trace!("Vertex PointerMove event x:{} y:{}", e.x() , e.y());
                     log::trace!("Vertex PointerMove event page_x:{} page_y:{}", e.page_x() , e.page_y());

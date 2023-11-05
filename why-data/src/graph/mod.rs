@@ -5,16 +5,28 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 
 pub use petgraph::{
+    graph::{DiGraph, UnGraph},
     graph::{EdgeIndex, NodeIndex},
     graph::{IndexType, WalkNeighbors},
     stable_graph::DefaultIx,
     Directed,
     Direction::Incoming,
-    EdgeType, Graph,
+    EdgeType, Graph, Undirected,
 };
 
 /// Causal Graph
-pub type CausalGraph<N, E, Ty = Directed, Ix = DefaultIx> = Graph<N, E, Ty, Ix>;
+pub enum CausalGraph<N, E, Ix = DefaultIx> {
+    /// Dag
+    Dag(Graph<N, E, Directed, Ix>),
+    /// Ungraph
+    Ungraph(Graph<N, E, Undirected, Ix>),
+}
+
+impl<N, E, Ix: IndexType> Debug for CausalGraph<N, E, Ix> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Causal Graph")
+    }
+}
 
 /// Extend Graph with new calls needed by causal graph algorithms.
 pub trait CausalGraphExt<'a, N, E, Ty: EdgeType, Ix: IndexType> {
@@ -80,7 +92,7 @@ impl<'a, N, E, Ty: EdgeType, Ix: IndexType> Iterator for Ancestors<'a, N, E, Ty,
     }
 }
 
-impl<'a, N, E, Ty, Ix> CausalGraphExt<'a, N, E, Ty, Ix> for CausalGraph<N, E, Ty, Ix>
+impl<'a, N, E, Ty, Ix> CausalGraphExt<'a, N, E, Ty, Ix> for Graph<N, E, Ty, Ix>
 where
     Ty: EdgeType,
     Ix: IndexType,
@@ -102,7 +114,7 @@ mod tests {
 
     #[test]
     fn test_ancestors() {
-        let mut g = CausalGraph::<&str, &str>::new();
+        let mut g = Graph::<&str, &str>::new();
 
         let a = g.add_node("A");
         let b = g.add_node("B");

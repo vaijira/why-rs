@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use std::sync::Arc;
 
 use dominator::{clone, svg, Dom};
@@ -25,20 +26,24 @@ pub struct SvgGraph {
 }
 
 impl SvgGraph {
-    pub fn new(graph: CausalGraph<NodeInfo, EdgeInfo>) -> Arc<Self> {
+    pub fn new(graph: CausalGraph<NodeInfo, EdgeInfo>) -> Rc<Self> {
         let vertexes = MutableVec::new();
-        for idx in graph.node_indices() {
+        let g = match &graph {
+            CausalGraph::Dag(g) => g,
+            _ => unimplemented!("Not implemented yet"),
+        };
+        for idx in g.node_indices() {
             vertexes.lock_mut().push_cloned(SvgVertex::new(idx))
         }
 
         let edges = MutableVec::new();
-        for idx in graph.edge_indices() {
+        for idx in g.edge_indices() {
             edges.lock_mut().push_cloned(SvgEdge::new(idx))
         }
 
         let bounds = Bounds::calculate_bounds(&graph, VIEWBOX_HEIGHT as i32, VIEWBOX_WIDTH as i32);
 
-        Arc::new(Self {
+        Rc::new(Self {
             graph,
             container: Mutable::new(None),
             vertexes,
@@ -47,7 +52,7 @@ impl SvgGraph {
         })
     }
 
-    pub fn render(svg_graph: Arc<Self>) -> Dom {
+    pub fn render(svg_graph: Rc<Self>) -> Dom {
         svg!("svg", {
             .attr("alt", "Causal graph")
             .attr("style", "font-family: Arial, sans-serif" )

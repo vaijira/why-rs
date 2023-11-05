@@ -11,6 +11,9 @@ members = [
     "why-ui",
 ]
 
+[profile.dev.package."*"]
+opt-level = 3
+
 [profile.release]
 panic = 'abort'
 lto = true

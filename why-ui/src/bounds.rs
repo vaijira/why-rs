@@ -1,7 +1,7 @@
 use why_data::{
     graph::{
         dagitty::{EdgeInfo, NodeInfo},
-        CausalGraph,
+        CausalGraph, Graph,
     },
     types::Point,
 };
@@ -33,11 +33,16 @@ impl Bounds {
 
         let width = if width > 0 { width as f64 } else { 0.0 };
 
-        for idx in graph.node_indices() {
-            min_x = min_x.min(graph.node_weight(idx).unwrap().layout_pos.get().x());
-            max_x = max_x.max(graph.node_weight(idx).unwrap().layout_pos.get().x());
-            min_y = min_y.min(graph.node_weight(idx).unwrap().layout_pos.get().y());
-            max_y = max_y.max(graph.node_weight(idx).unwrap().layout_pos.get().y());
+        let g: &Graph<NodeInfo, EdgeInfo> = match graph {
+            CausalGraph::Dag(g) => g,
+            _ => unimplemented!("Not implemented yet"),
+        };
+
+        for idx in g.node_indices() {
+            min_x = min_x.min(g.node_weight(idx).unwrap().layout_pos.get().x());
+            max_x = max_x.max(g.node_weight(idx).unwrap().layout_pos.get().x());
+            min_y = min_y.min(g.node_weight(idx).unwrap().layout_pos.get().y());
+            max_y = max_y.max(g.node_weight(idx).unwrap().layout_pos.get().y());
         }
         if max_x == min_x {
             max_x = min_x + 1.0

@@ -9,4 +9,4 @@
 //! Parser for dagitty format.
 
 /// Parsing module.
-pub mod parser;
+pub mod dagitty;

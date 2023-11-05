@@ -1,23 +1,25 @@
-use std::{iter::once, sync::Arc};
+use std::iter::once;
+use std::rc::Rc;
 
 use dominator::{clone, events, html, with_node, Dom};
 use futures_signals::signal::SignalExt;
 use web_sys::HtmlElement;
 use why_data::graph::dagitty::{EdgeInfo, EdgeType, NodeInfo, VertexType};
-use why_data::graph::{CausalGraph, CausalGraphExt};
+use why_data::graph::{CausalGraph, CausalGraphExt, DiGraph};
 use why_data::types::Point;
+use why_parser::dagitty::DagittyParser;
 
 use crate::bounds::Bounds;
 use crate::css::{MAIN_CLASS, SVG_DIV_CLASS};
 use crate::svggraph::SvgGraph;
 
 pub struct App {
-    svg_graph: Arc<SvgGraph>,
+    svg_graph: Rc<SvgGraph>,
 }
 
 impl App {
-    pub fn new() -> Arc<Self> {
-        let mut example_graph = CausalGraph::<NodeInfo, EdgeInfo>::new();
+    pub fn new() -> Rc<Self> {
+        let mut example_graph = DiGraph::<NodeInfo, EdgeInfo>::new();
 
         let a = example_graph.add_node(NodeInfo::new("A", -2.2, -1.52, VertexType::None));
         let b = example_graph.add_node(NodeInfo::new("B", 1.4, -1.46, VertexType::None));
@@ -41,12 +43,12 @@ impl App {
 
         example_graph.add_edges(edges);
 
-        Arc::new(Self {
-            svg_graph: SvgGraph::new(example_graph),
+        Rc::new(Self {
+            svg_graph: SvgGraph::new(CausalGraph::Dag(example_graph)),
         })
     }
 
-    pub fn render(app: Arc<Self>) -> Dom {
+    pub fn render(app: Rc<Self>) -> Dom {
         html!("main", {
             .class(&*MAIN_CLASS)
             .children(&mut [

@@ -1,11 +1,12 @@
 dagitty_graph = { STRICT? ~ GRAPHTYPE ~ IDENTIFIER? ~ "{" ~ stmt_list ~ "}" }
 
 STRICT = { ^"strict" }
+
 GRAPHTYPE = { ( ^"graph" | ^"digraph" | ^"dag" | ^"mag" | ^"pdag" | ^"pag") }
 
 stmt_list = { ( stmt ~ ";"? ~ stmt_list )? }
 
-stmt = { edge_stmt | global_option  | node_stmt }
+stmt = { edge_stmt | global_option | node_stmt }
 
 global_option = { id_eq }
 

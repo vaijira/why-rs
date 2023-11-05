@@ -1,8 +1,10 @@
 use crate::{css::PATH_CLASS, svggraph::SvgGraph};
 use dominator::{clone, events, svg, with_node, Dom};
 use futures_signals::{map_ref, signal::Mutable};
+use std::rc::Rc;
 use std::sync::Arc;
 use why_data::graph::dagitty::EdgeType;
+use why_data::graph::CausalGraph;
 use why_data::{
     graph::{EdgeIndex, NodeIndex},
     types::Point,
@@ -25,21 +27,23 @@ impl SvgEdge {
     }
 
     fn svg_edge_anchor(
-        svg_graph: Arc<SvgGraph>,
+        svg_graph: Rc<SvgGraph>,
         v1: NodeIndex,
         point_v1: &Point<f64>,
         point_v2: &Point<f64>,
         arrow_head: bool,
     ) -> Point<f64> {
-        let svg_length = svg_graph
-            .graph
-            .node_weight(v1)
-            .unwrap()
-            .vertex_path_element
-            .lock_ref()
-            .as_ref()
-            .map(|path| path.get_total_length())
-            .unwrap_or(0.0);
+        let svg_length = match &svg_graph.graph {
+            CausalGraph::Dag(g) => g
+                .node_weight(v1)
+                .unwrap()
+                .vertex_path_element
+                .lock_ref()
+                .as_ref()
+                .map(|path| path.get_total_length())
+                .unwrap_or(0.0),
+            _ => unimplemented!(),
+        };
 
         let dx = point_v2.x() - point_v1.x();
         let dy = point_v2.y() - point_v1.y();
@@ -47,33 +51,37 @@ impl SvgEdge {
         let length = if length < 0.01 { 0.01 } else { length };
 
         let svg_point = if dy > 0.0 {
-            svg_graph
-                .graph
-                .node_weight(v1)
-                .unwrap()
-                .vertex_path_element
-                .lock_ref()
-                .as_ref()
-                .map(|path| {
-                    path.get_point_at_length(
-                        (f64::acos(dx / length) / 2.0 / std::f64::consts::PI * svg_length as f64)
-                            as f32,
-                    )
-                })
+            match &svg_graph.graph {
+                CausalGraph::Dag(g) => g
+                    .node_weight(v1)
+                    .unwrap()
+                    .vertex_path_element
+                    .lock_ref()
+                    .as_ref()
+                    .map(|path| {
+                        path.get_point_at_length(
+                            (f64::acos(dx / length) / 2.0 / std::f64::consts::PI
+                                * svg_length as f64) as f32,
+                        )
+                    }),
+                _ => unimplemented!(),
+            }
         } else {
-            svg_graph
-                .graph
-                .node_weight(v1)
-                .unwrap()
-                .vertex_path_element
-                .lock_ref()
-                .as_ref()
-                .map(|path| {
-                    path.get_point_at_length(
-                        (1.0 - f64::acos(dx / length) / 2.0 / std::f64::consts::PI) as f32
-                            * svg_length,
-                    )
-                })
+            match &svg_graph.graph {
+                CausalGraph::Dag(g) => g
+                    .node_weight(v1)
+                    .unwrap()
+                    .vertex_path_element
+                    .lock_ref()
+                    .as_ref()
+                    .map(|path| {
+                        path.get_point_at_length(
+                            (1.0 - f64::acos(dx / length) / 2.0 / std::f64::consts::PI) as f32
+                                * svg_length,
+                        )
+                    }),
+                _ => unimplemented!(),
+            }
         }
         .unwrap()
         .ok()
@@ -92,12 +100,19 @@ impl SvgEdge {
 
     fn svg_edge_anchors(
         edge: Arc<SvgEdge>,
-        svg_graph: Arc<SvgGraph>,
+        svg_graph: Rc<SvgGraph>,
         point_v1: &Point<f64>,
         point_v2: &Point<f64>,
     ) -> (Point<f64>, Point<f64>) {
-        let edge_info = svg_graph.graph.edge_weight(edge.id).unwrap();
-        let (v1, v2) = svg_graph.graph.edge_endpoints(edge.id).unwrap();
+        let edge_info = match &svg_graph.graph {
+            CausalGraph::Dag(g) => g.edge_weight(edge.id).unwrap(),
+            _ => unimplemented!(),
+        };
+
+        let (v1, v2) = match &svg_graph.graph {
+            CausalGraph::Dag(g) => g.edge_endpoints(edge.id).unwrap(),
+            _ => unimplemented!(),
+        };
         let edge_type = *edge_info.edge_type.lock_ref();
         let edge_point = edge_info.layout_pos.get();
 
@@ -116,16 +131,24 @@ impl SvgEdge {
         (v1_anchor, v2_anchor)
     }
 
-    fn calculate_arrow(edge: Arc<SvgEdge>, svg_graph: Arc<SvgGraph>) -> String {
-        let layout_pos = svg_graph
-            .graph
-            .edge_weight(edge.id)
-            .unwrap()
-            .layout_pos
-            .get();
-        let (v1, v2) = svg_graph.graph.edge_endpoints(edge.id).unwrap();
-        let info_v1 = svg_graph.graph.node_weight(v1).unwrap();
-        let info_v2 = svg_graph.graph.node_weight(v2).unwrap();
+    fn calculate_arrow(edge: Arc<SvgEdge>, svg_graph: Rc<SvgGraph>) -> String {
+        let layout_pos = match &svg_graph.graph {
+            CausalGraph::Dag(g) => g.edge_weight(edge.id).unwrap().layout_pos.get(),
+            _ => unimplemented!(),
+        };
+
+        let (v1, v2) = match &svg_graph.graph {
+            CausalGraph::Dag(g) => g.edge_endpoints(edge.id).unwrap(),
+            _ => unimplemented!(),
+        };
+        let info_v1 = match &svg_graph.graph {
+            CausalGraph::Dag(g) => g.node_weight(v1).unwrap(),
+            _ => unimplemented!(),
+        };
+        let info_v2 = match &svg_graph.graph {
+            CausalGraph::Dag(g) => g.node_weight(v2).unwrap(),
+            _ => unimplemented!(),
+        };
 
         let point_v1 = svg_graph
             .bounds
@@ -168,16 +191,24 @@ impl SvgEdge {
         )
     }
 
-    fn calculate_edge(edge: Arc<SvgEdge>, svg_graph: Arc<SvgGraph>) -> String {
-        let layout_pos = svg_graph
-            .graph
-            .edge_weight(edge.id)
-            .unwrap()
-            .layout_pos
-            .get();
-        let (v1, v2) = svg_graph.graph.edge_endpoints(edge.id).unwrap();
-        let info_v1 = svg_graph.graph.node_weight(v1).unwrap();
-        let info_v2 = svg_graph.graph.node_weight(v2).unwrap();
+    fn calculate_edge(edge: Arc<SvgEdge>, svg_graph: Rc<SvgGraph>) -> String {
+        let layout_pos = match &svg_graph.graph {
+            CausalGraph::Dag(g) => g.edge_weight(edge.id).unwrap().layout_pos.get(),
+            _ => unimplemented!(),
+        };
+
+        let (v1, v2) = match &svg_graph.graph {
+            CausalGraph::Dag(g) => g.edge_endpoints(edge.id).unwrap(),
+            _ => unimplemented!(),
+        };
+        let info_v1 = match &svg_graph.graph {
+            CausalGraph::Dag(g) => g.node_weight(v1).unwrap(),
+            _ => unimplemented!(),
+        };
+        let info_v2 = match &svg_graph.graph {
+            CausalGraph::Dag(g) => g.node_weight(v2).unwrap(),
+            _ => unimplemented!(),
+        };
 
         let point_v1 = svg_graph
             .bounds
@@ -214,11 +245,23 @@ impl SvgEdge {
         line_path
     }
 
-    pub fn render(edge: Arc<SvgEdge>, svg_graph: Arc<SvgGraph>) -> Dom {
-        let edge_info = svg_graph.graph.edge_weight(edge.id).unwrap();
-        let (v1, v2) = svg_graph.graph.edge_endpoints(edge.id).unwrap();
-        let info_v1 = svg_graph.graph.node_weight(v1).unwrap();
-        let info_v2 = svg_graph.graph.node_weight(v2).unwrap();
+    pub fn render(edge: Arc<SvgEdge>, svg_graph: Rc<SvgGraph>) -> Dom {
+        let edge_info = match &svg_graph.graph {
+            CausalGraph::Dag(g) => g.edge_weight(edge.id).unwrap(),
+            _ => unimplemented!(),
+        };
+        let (v1, v2) = match &svg_graph.graph {
+            CausalGraph::Dag(g) => g.edge_endpoints(edge.id).unwrap(),
+            _ => unimplemented!(),
+        };
+        let info_v1 = match &svg_graph.graph {
+            CausalGraph::Dag(g) => g.node_weight(v1).unwrap(),
+            _ => unimplemented!(),
+        };
+        let info_v2 = match &svg_graph.graph {
+            CausalGraph::Dag(g) => g.node_weight(v2).unwrap(),
+            _ => unimplemented!(),
+        };
 
         let children = vec![
             svg!("path", {
@@ -268,7 +311,10 @@ impl SvgEdge {
             })
             .event(clone!(svg_graph, edge => move |e: events::PointerMove| {
                 if edge.dragging.get() {
-                    let info = svg_graph.graph.edge_weight(edge.id).unwrap();
+                    let info = match &svg_graph.graph {
+                        CausalGraph::Dag(g) => g.edge_weight(edge.id).unwrap(),
+                        _ => unimplemented!(),
+                    };
                     log::debug!("Edge PointerMove event x:{} y:{}", e.x() , e.y());
                     log::debug!("Edge PointerMove event page_x:{} page_y:{}", e.page_x() , e.page_y());
                     let ptr_x = e.page_x() - svg_graph.container.lock_ref().as_ref().map(|element| element.client_left()).unwrap_or(0);
