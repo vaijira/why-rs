@@ -54,6 +54,7 @@ impl SvgVertex {
                         VertexType::None => CSS_VERTEX_TYPE_NONE_FILL_COLOR,
                         VertexType::Exposure => CSS_VERTEX_TYPE_EXPOSURE_FILL_COLOR,
                         VertexType::Outcome => CSS_VERTEX_TYPE_OUTCOME_FILL_COLOR,
+                        _ => todo!(),
                     }
                 }))
                 .attr_signal("stroke", info.vertex_type.signal_ref({|v_type|
@@ -61,6 +62,7 @@ impl SvgVertex {
                         VertexType::None => CSS_VERTEX_TYPE_NONE_STROKE_COLOR,
                         VertexType::Exposure => CSS_VERTEX_TYPE_EXPOSURE_STROKE_COLOR,
                         VertexType::Outcome => CSS_VERTEX_TYPE_OUTCOME_STROKE_COLOR,
+                        _ => todo!(),
                     }
                 }))
                 .attr("d", "M 0 0 m 20, 0 a 20,15 0 1,1 -40,0 a 20,15 0 1,1 40,0")

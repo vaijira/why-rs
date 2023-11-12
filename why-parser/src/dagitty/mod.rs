@@ -1,12 +1,15 @@
 #![allow(missing_docs)]
 
-use std::marker::PhantomData;
+use std::{collections::HashMap, marker::PhantomData};
 
 use pest::{error::Error, iterators::Pair, Parser};
 use pest_derive::Parser;
-use why_data::graph::{
-    dagitty::{EdgeInfo, NodeInfo, VertexType},
-    CausalGraph, Graph, UnGraph,
+use why_data::{
+    graph::{
+        dagitty::{EdgeInfo, EdgeType, NodeInfo, VertexType},
+        CausalGraph, Graph, NodeIndex, UnGraph,
+    },
+    types::Point,
 };
 
 // Parser
@@ -15,10 +18,80 @@ use why_data::graph::{
 pub struct DagittyParser;
 
 impl DagittyParser {
+    fn parse_edge_rhs(
+        pair: Pair<'_, Rule>,
+        mut builder: CausalGraphBuilder<NodeInfo, EdgeInfo>,
+        left_node_id: &str,
+        pos: Option<(f64, f64)>,
+    ) -> Result<CausalGraphBuilder<NodeInfo, EdgeInfo>, Error<Rule>> {
+        debug_assert!(
+            Rule::edge_rhs == pair.as_rule(),
+            "Input must be an edge_rhs rule"
+        );
+        let mut inners = pair.into_inner();
+        let edgeop = inners.next().unwrap().as_str();
+        let node_id = inners
+            .next()
+            .map(|p| {
+                let mut inners = p.into_inner();
+                inners.next().unwrap().as_str()
+            })
+            .unwrap();
+
+        match edgeop {
+            "@->" | "->" => {
+                let edge = EdgeInfo::new("", pos.map(|p| Point::new(p.0, p.1)), EdgeType::Directed);
+                builder = builder.add_edge(left_node_id, node_id, edge);
+            }
+            "<-@" | "<-" => {
+                let edge = EdgeInfo::new("", pos.map(|p| Point::new(p.0, p.1)), EdgeType::Directed);
+                builder = builder.add_edge(node_id, left_node_id, edge);
+            }
+            "--@" | "--" | "<->" | "@-@" | "@--" => {
+                let edge =
+                    EdgeInfo::new("", pos.map(|p| Point::new(p.0, p.1)), EdgeType::Undirected);
+                builder = builder.add_edge(left_node_id, node_id, edge);
+            }
+            _ => unreachable!(),
+        }
+
+        if inners.peek().is_some() {
+            builder = Self::parse_edge_rhs(inners.next().unwrap(), builder, node_id, pos)?;
+        }
+
+        Ok(builder)
+    }
+
     fn parse_edge(
         pair: Pair<'_, Rule>,
         mut builder: CausalGraphBuilder<NodeInfo, EdgeInfo>,
     ) -> Result<CausalGraphBuilder<NodeInfo, EdgeInfo>, Error<Rule>> {
+        let mut pos = None;
+        let mut inners = pair.into_inner();
+        let node_id = inners
+            .next()
+            .map(|p| {
+                let mut inners = p.into_inner();
+                inners.next().unwrap().as_str()
+            })
+            .unwrap();
+        let edge_rhs = inners.next().unwrap();
+        let attrs = inners.next().map(|p| AttrList::parse(p).unwrap());
+        if let Some(attrs) = attrs {
+            for alist in attrs.elems {
+                for attr in alist.elems {
+                    if let ("pos", position) = attr {
+                        let (x, y) = position.split_at(position.find(',').unwrap_or(0));
+                        pos = Some((
+                            x.parse::<f64>().unwrap_or(0.0),
+                            y.parse::<f64>().unwrap_or(0.0),
+                        ));
+                    }
+                }
+            }
+        }
+
+        builder = Self::parse_edge_rhs(edge_rhs, builder, node_id, pos)?;
         Ok(builder)
     }
 
@@ -64,8 +137,8 @@ impl DagittyParser {
                 }
             }
         }
-        let node_info = NodeInfo::new(node_id.into(), pos.0, pos.1, vertex_type);
-        builder = builder.add_node(node_info);
+        let node_info = NodeInfo::new(node_id, pos.0, pos.1, vertex_type);
+        builder = builder.add_node(node_info, node_id);
 
         Ok(builder)
     }
@@ -78,14 +151,8 @@ impl DagittyParser {
         builder = match inner.as_rule() {
             Rule::node_stmt => Self::parse_node(inner, builder)?,
             Rule::edge_stmt => Self::parse_edge(inner, builder)?,
-            /* Rule::attr_stmt => AttrStmt::parse(inner).map(|p| Stmt::AttrStmt(p)),
-            Rule::id_eq => {
-                let mut inners = inner.into_inner();
-                let id1 = inners.next().unwrap().as_str();
-                let id2 = inners.next().unwrap().as_str();
-                Ok(Stmt::IDEq(id1, id2))
-            }*/
-            _ => !unreachable!("This rule shouldn't be reachabled"),
+            Rule::global_option => todo!(),
+            _ => unreachable!(),
         };
 
         Ok(builder)
@@ -139,7 +206,7 @@ struct AttrList<'a, A = (&'a str, &'a str)> {
 
 impl<'a> AttrList<'a> {
     fn parse(p: Pair<'a, Rule>) -> Result<Self, ()> {
-        assert!(
+        debug_assert!(
             Rule::attr_list == p.as_rule(),
             "Input must be an attr_list rule"
         );
@@ -170,7 +237,7 @@ struct AList<'a, A = (&'a str, &'a str)> {
 
 impl<'a> AList<'a> {
     fn parse(p: Pair<'a, Rule>) -> Result<Self, ()> {
-        assert!(Rule::a_list == p.as_rule(), "Input must be an a_list rule");
+        debug_assert!(Rule::a_list == p.as_rule(), "Input must be an a_list rule");
         let mut v = Vec::new();
         let mut inners = p.into_inner();
         let pair = inners.next().unwrap();
@@ -203,11 +270,15 @@ impl<'a> AList<'a> {
 
 struct CausalGraphBuilder<N, E> {
     graph: Option<CausalGraph<N, E>>,
+    node_map: HashMap<String, NodeIndex>,
 }
 
 impl<N, E> CausalGraphBuilder<N, E> {
     fn new() -> CausalGraphBuilder<N, E> {
-        Self { graph: None }
+        Self {
+            graph: None,
+            node_map: HashMap::new(),
+        }
     }
 
     fn dag(mut self) -> CausalGraphBuilder<N, E> {
@@ -222,8 +293,24 @@ impl<N, E> CausalGraphBuilder<N, E> {
         self
     }
 
-    fn add_node(mut self, n: N) -> CausalGraphBuilder<N, E> {
-        self.graph().add_node(n)
+    fn add_node(mut self, n: N, id: &str) -> CausalGraphBuilder<N, E> {
+        if self.graph.is_some() {
+            let g = self.graph.as_mut().unwrap();
+            self.node_map.insert(id.into(), g.add_node(n));
+        }
+        self
+    }
+
+    fn add_edge(mut self, left_node: &str, right_node: &str, edge: E) -> CausalGraphBuilder<N, E> {
+        let left_id = self.node_map.get(left_node);
+        let right_id = self.node_map.get(right_node);
+
+        if self.graph.is_some() && left_id.is_some() && right_id.is_some() {
+            let g = self.graph.as_mut().unwrap();
+            g.add_edge(*left_id.unwrap(), *right_id.unwrap(), edge);
+        }
+
+        self
     }
 
     fn build(self) -> CausalGraph<N, E> {

@@ -28,6 +28,24 @@ impl<N, E, Ix: IndexType> Debug for CausalGraph<N, E, Ix> {
     }
 }
 
+impl<N, E, Ix: IndexType> CausalGraph<N, E, Ix> {
+    /// Add new node to the graph.
+    pub fn add_node(&mut self, n: N) -> NodeIndex<Ix> {
+        match self {
+            Self::Dag(g) => g.add_node(n),
+            Self::Ungraph(g) => g.add_node(n),
+        }
+    }
+
+    /// Add new edge to the graph.
+    pub fn add_edge(&mut self, left: NodeIndex<Ix>, right: NodeIndex<Ix>, e: E) -> EdgeIndex<Ix> {
+        match self {
+            Self::Dag(g) => g.add_edge(left, right, e),
+            Self::Ungraph(g) => g.add_edge(left, right, e),
+        }
+    }
+}
+
 /// Extend Graph with new calls needed by causal graph algorithms.
 pub trait CausalGraphExt<'a, N, E, Ty: EdgeType, Ix: IndexType> {
     /// Return all ancestors from a given node.
