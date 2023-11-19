@@ -1,50 +1,44 @@
-use std::iter::once;
 use std::rc::Rc;
 
 use dominator::{clone, events, html, with_node, Dom};
-use futures_signals::signal::SignalExt;
+use futures_signals::signal::{Mutable, SignalExt};
 use web_sys::HtmlElement;
-use why_data::graph::dagitty::{EdgeInfo, EdgeType, NodeInfo, VertexType};
-use why_data::graph::{CausalGraph, CausalGraphExt, DiGraph};
-use why_data::types::Point;
 use why_parser::dagitty::DagittyParser;
 
 use crate::bounds::Bounds;
 use crate::css::{MAIN_CLASS, SVG_DIV_CLASS};
 use crate::svggraph::SvgGraph;
 
+const DEFAULT_GRAPH: &str = r#"
+dag {
+A [selected,pos="-2.200,-1.520"]
+B [pos="1.400,-1.460"]
+D [outcome,pos="1.400,1.621"]
+E [exposure,pos="-2.200,1.597"]
+Z [adjusted,pos="-0.300,-0.082"]
+A -> E
+A -> Z [pos="-0.791,-1.045"]
+B -> D
+B -> Z [pos="0.680,-0.496"]
+E -> D
+}
+"#;
+
 pub struct App {
+    graph_text: Mutable<String>,
     svg_graph: Rc<SvgGraph>,
 }
 
 impl App {
     pub fn new() -> Rc<Self> {
-        let mut example_graph = DiGraph::<NodeInfo, EdgeInfo>::new();
-
-        let a = example_graph.add_node(NodeInfo::new("A", -2.2, -1.52, VertexType::None));
-        let b = example_graph.add_node(NodeInfo::new("B", 1.4, -1.46, VertexType::None));
-        let d = example_graph.add_node(NodeInfo::new("D", 1.4, 1.621, VertexType::Outcome));
-        let e = example_graph.add_node(NodeInfo::new("E", -2.2, 1.597, VertexType::Exposure));
-        let z = example_graph.add_node(NodeInfo::new("Z", -0.3, -0.082, VertexType::None));
-
-        let edges = once((a, e, EdgeInfo::new("", None, EdgeType::Directed)))
-            .chain(once((
-                a,
-                z,
-                EdgeInfo::new("", Some(Point::new(-0.791, -1.045)), EdgeType::Directed),
-            )))
-            .chain(once((b, d, EdgeInfo::new("", None, EdgeType::Directed))))
-            .chain(once((
-                b,
-                z,
-                EdgeInfo::new("", Some(Point::new(0.680, -0.496)), EdgeType::Directed),
-            )))
-            .chain(once((e, d, EdgeInfo::new("", None, EdgeType::Directed))));
-
-        example_graph.add_edges(edges);
+        let g = match DagittyParser::parse_str(DEFAULT_GRAPH) {
+            Ok(g) => g,
+            Err(err) => panic!("Unable to parse default graph, error: {}", err),
+        };
 
         Rc::new(Self {
-            svg_graph: SvgGraph::new(CausalGraph::Dag(example_graph)),
+            graph_text: Mutable::new(DEFAULT_GRAPH.into()),
+            svg_graph: SvgGraph::new(g),
         })
     }
 

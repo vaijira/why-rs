@@ -18,10 +18,16 @@ pub struct SvgVertex {
 const CSS_VERTEX_TYPE_NONE_FILL_COLOR: &str = "#aaaaaa";
 const CSS_VERTEX_TYPE_EXPOSURE_FILL_COLOR: &str = "#bed403";
 const CSS_VERTEX_TYPE_OUTCOME_FILL_COLOR: &str = "#00a2e0";
+const CSS_VERTEX_TYPE_SELECTED_FILL_COLOR: &str = "#bed403";
+const CSS_VERTEX_TYPE_ADJUSTED_FILL_COLOR: &str = "#00a2e0";
+const CSS_VERTEX_TYPE_UNOBSERVED_FILL_COLOR: &str = "#00a2e0";
 
 const CSS_VERTEX_TYPE_NONE_STROKE_COLOR: &str = "#666666";
 const CSS_VERTEX_TYPE_EXPOSURE_STROKE_COLOR: &str = "#000000";
 const CSS_VERTEX_TYPE_OUTCOME_STROKE_COLOR: &str = "#000000";
+const CSS_VERTEX_TYPE_SELECTED_STROKE_COLOR: &str = "#000000";
+const CSS_VERTEX_TYPE_ADJUSTED_STROKE_COLOR: &str = "#000000";
+const CSS_VERTEX_TYPE_UNOBSERVED_STROKE_COLOR: &str = "#000000";
 
 impl SvgVertex {
     pub fn new(id: NodeIndex) -> Arc<Self> {
@@ -54,7 +60,9 @@ impl SvgVertex {
                         VertexType::None => CSS_VERTEX_TYPE_NONE_FILL_COLOR,
                         VertexType::Exposure => CSS_VERTEX_TYPE_EXPOSURE_FILL_COLOR,
                         VertexType::Outcome => CSS_VERTEX_TYPE_OUTCOME_FILL_COLOR,
-                        _ => todo!(),
+                        VertexType::Selected => CSS_VERTEX_TYPE_SELECTED_FILL_COLOR,
+                        VertexType::Adjusted => CSS_VERTEX_TYPE_ADJUSTED_FILL_COLOR,
+                        VertexType::Unobserved => CSS_VERTEX_TYPE_UNOBSERVED_FILL_COLOR,
                     }
                 }))
                 .attr_signal("stroke", info.vertex_type.signal_ref({|v_type|
@@ -62,7 +70,9 @@ impl SvgVertex {
                         VertexType::None => CSS_VERTEX_TYPE_NONE_STROKE_COLOR,
                         VertexType::Exposure => CSS_VERTEX_TYPE_EXPOSURE_STROKE_COLOR,
                         VertexType::Outcome => CSS_VERTEX_TYPE_OUTCOME_STROKE_COLOR,
-                        _ => todo!(),
+                        VertexType::Selected => CSS_VERTEX_TYPE_SELECTED_STROKE_COLOR,
+                        VertexType::Adjusted => CSS_VERTEX_TYPE_ADJUSTED_STROKE_COLOR,
+                        VertexType::Unobserved => CSS_VERTEX_TYPE_UNOBSERVED_STROKE_COLOR,
                     }
                 }))
                 .attr("d", "M 0 0 m 20, 0 a 20,15 0 1,1 -40,0 a 20,15 0 1,1 40,0")

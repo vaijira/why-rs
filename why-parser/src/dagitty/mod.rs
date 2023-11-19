@@ -18,6 +18,15 @@ use why_data::{
 pub struct DagittyParser;
 
 impl DagittyParser {
+    fn parse_attr_value_position(pos: &str) -> (f64, f64) {
+        let pos = pos.replace('"', "");
+        let (x, y) = pos[..].split_at(pos.find(',').unwrap_or(0));
+        (
+            x.parse::<f64>().unwrap_or(0.0),
+            y[1..].parse::<f64>().unwrap_or(0.0),
+        )
+    }
+
     fn parse_edge_rhs(
         pair: Pair<'_, Rule>,
         mut builder: CausalGraphBuilder<NodeInfo, EdgeInfo>,
@@ -81,11 +90,7 @@ impl DagittyParser {
             for alist in attrs.elems {
                 for attr in alist.elems {
                     if let ("pos", position) = attr {
-                        let (x, y) = position.split_at(position.find(',').unwrap_or(0));
-                        pos = Some((
-                            x.parse::<f64>().unwrap_or(0.0),
-                            y.parse::<f64>().unwrap_or(0.0),
-                        ));
+                        pos = Some(Self::parse_attr_value_position(position));
                     }
                 }
             }
@@ -126,11 +131,7 @@ impl DagittyParser {
                             vertex_type = VertexType::Unobserved
                         }
                         ("pos", position) => {
-                            let (x, y) = position.split_at(position.find(',').unwrap_or(0));
-                            pos = (
-                                x.parse::<f64>().unwrap_or(0.0),
-                                y.parse::<f64>().unwrap_or(0.0),
-                            );
+                            pos = Self::parse_attr_value_position(position);
                         }
                         (_, _) => (),
                     }
@@ -161,6 +162,10 @@ impl DagittyParser {
         pair: Pair<'_, Rule>,
         mut builder: CausalGraphBuilder<NodeInfo, EdgeInfo>,
     ) -> Result<CausalGraphBuilder<NodeInfo, EdgeInfo>, Error<Rule>> {
+        debug_assert!(
+            Rule::stmt_list == pair.as_rule(),
+            "Input must be a stmt_list rule"
+        );
         let mut inner = pair.into_inner();
         match inner.next() {
             None => {}
@@ -192,7 +197,7 @@ impl DagittyParser {
             &_ => unreachable!("Unknown graph string"),
         };
 
-        builder = Self::parse_stmts(pair, builder)?;
+        builder = Self::parse_stmts(dagitty_g.next().unwrap(), builder)?;
 
         Ok(builder.build())
     }
@@ -321,7 +326,6 @@ impl<N, E> CausalGraphBuilder<N, E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pest::Parser;
 
     const BASE_DAG_STR: &str = r#"dag {
 A [selected,pos="-2.200,-1.520"]
@@ -337,7 +341,17 @@ E -> D
 }"#;
 
     #[test]
-    fn test_parser() {
+    fn test_parsing_default_graph() {
+        let graph = DagittyParser::parse_str(BASE_DAG_STR).unwrap();
+        if let CausalGraph::Dag(g) = graph {
+            assert_eq!(5, g.node_count());
+        } else {
+            panic!("It should returned a valid Dag");
+        }
+    }
+
+    #[test]
+    fn test_pest_parser() {
         let mut parser = DagittyParser::parse(Rule::dagitty_graph, BASE_DAG_STR).unwrap();
         let mut dagitty_g = parser.next().unwrap().into_inner();
         let mut strict = false;
@@ -378,5 +392,11 @@ E -> D
             [("selected", ""), ("pos", "\"-2.200,-1.520\"")],
             &(attr_list.elems[0]).elems[..]
         );
+    }
+
+    #[test]
+    fn test_parse_attr_value_position() {
+        let pos = DagittyParser::parse_attr_value_position(r#"-2.200,-1.520"#);
+        assert_eq!((-2.200, -1.520), pos);
     }
 }
