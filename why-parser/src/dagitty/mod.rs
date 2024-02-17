@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use std::{collections::HashMap, marker::PhantomData};
+use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
 use pest::{error::Error, iterators::Pair, Parser};
 use pest_derive::Parser;
@@ -29,10 +29,10 @@ impl DagittyParser {
 
     fn parse_edge_rhs(
         pair: Pair<'_, Rule>,
-        mut builder: CausalGraphBuilder<NodeInfo, EdgeInfo>,
+        mut builder: CausalGraphBuilder<Arc<NodeInfo>, Arc<EdgeInfo>>,
         left_node_id: &str,
         pos: Option<(f64, f64)>,
-    ) -> Result<CausalGraphBuilder<NodeInfo, EdgeInfo>, Error<Rule>> {
+    ) -> Result<CausalGraphBuilder<Arc<NodeInfo>, Arc<EdgeInfo>>, Error<Rule>> {
         debug_assert!(
             Rule::edge_rhs == pair.as_rule(),
             "Input must be an edge_rhs rule"
@@ -49,16 +49,27 @@ impl DagittyParser {
 
         match edgeop {
             "@->" | "->" => {
-                let edge = EdgeInfo::new("", pos.map(|p| Point::new(p.0, p.1)), EdgeType::Directed);
+                let edge = Arc::new(EdgeInfo::new(
+                    "",
+                    pos.map(|p| Point::new(p.0, p.1)),
+                    EdgeType::Directed,
+                ));
                 builder = builder.add_edge(left_node_id, node_id, edge);
             }
             "<-@" | "<-" => {
-                let edge = EdgeInfo::new("", pos.map(|p| Point::new(p.0, p.1)), EdgeType::Directed);
+                let edge = Arc::new(EdgeInfo::new(
+                    "",
+                    pos.map(|p| Point::new(p.0, p.1)),
+                    EdgeType::Directed,
+                ));
                 builder = builder.add_edge(node_id, left_node_id, edge);
             }
             "--@" | "--" | "<->" | "@-@" | "@--" => {
-                let edge =
-                    EdgeInfo::new("", pos.map(|p| Point::new(p.0, p.1)), EdgeType::Undirected);
+                let edge = Arc::new(EdgeInfo::new(
+                    "",
+                    pos.map(|p| Point::new(p.0, p.1)),
+                    EdgeType::Undirected,
+                ));
                 builder = builder.add_edge(left_node_id, node_id, edge);
             }
             _ => unreachable!(),
@@ -73,8 +84,8 @@ impl DagittyParser {
 
     fn parse_edge(
         pair: Pair<'_, Rule>,
-        mut builder: CausalGraphBuilder<NodeInfo, EdgeInfo>,
-    ) -> Result<CausalGraphBuilder<NodeInfo, EdgeInfo>, Error<Rule>> {
+        mut builder: CausalGraphBuilder<Arc<NodeInfo>, Arc<EdgeInfo>>,
+    ) -> Result<CausalGraphBuilder<Arc<NodeInfo>, Arc<EdgeInfo>>, Error<Rule>> {
         let mut pos = None;
         let mut inners = pair.into_inner();
         let node_id = inners
@@ -102,8 +113,8 @@ impl DagittyParser {
 
     fn parse_node(
         pair: Pair<'_, Rule>,
-        mut builder: CausalGraphBuilder<NodeInfo, EdgeInfo>,
-    ) -> Result<CausalGraphBuilder<NodeInfo, EdgeInfo>, Error<Rule>> {
+        mut builder: CausalGraphBuilder<Arc<NodeInfo>, Arc<EdgeInfo>>,
+    ) -> Result<CausalGraphBuilder<Arc<NodeInfo>, Arc<EdgeInfo>>, Error<Rule>> {
         let mut vertex_type = VertexType::None;
         let mut pos = (0.0, 0.0);
         let mut inners = pair.into_inner();
@@ -138,7 +149,7 @@ impl DagittyParser {
                 }
             }
         }
-        let node_info = NodeInfo::new(node_id, pos.0, pos.1, vertex_type);
+        let node_info = Arc::new(NodeInfo::new(node_id, pos.0, pos.1, vertex_type));
         builder = builder.add_node(node_info, node_id);
 
         Ok(builder)
@@ -146,8 +157,8 @@ impl DagittyParser {
 
     fn parse_stmt(
         pair: Pair<'_, Rule>,
-        mut builder: CausalGraphBuilder<NodeInfo, EdgeInfo>,
-    ) -> Result<CausalGraphBuilder<NodeInfo, EdgeInfo>, Error<Rule>> {
+        mut builder: CausalGraphBuilder<Arc<NodeInfo>, Arc<EdgeInfo>>,
+    ) -> Result<CausalGraphBuilder<Arc<NodeInfo>, Arc<EdgeInfo>>, Error<Rule>> {
         let inner = pair.into_inner().next().unwrap();
         builder = match inner.as_rule() {
             Rule::node_stmt => Self::parse_node(inner, builder)?,
@@ -160,8 +171,8 @@ impl DagittyParser {
     }
     fn parse_stmts(
         pair: Pair<'_, Rule>,
-        mut builder: CausalGraphBuilder<NodeInfo, EdgeInfo>,
-    ) -> Result<CausalGraphBuilder<NodeInfo, EdgeInfo>, Error<Rule>> {
+        mut builder: CausalGraphBuilder<Arc<NodeInfo>, Arc<EdgeInfo>>,
+    ) -> Result<CausalGraphBuilder<Arc<NodeInfo>, Arc<EdgeInfo>>, Error<Rule>> {
         debug_assert!(
             Rule::stmt_list == pair.as_rule(),
             "Input must be a stmt_list rule"
@@ -180,8 +191,10 @@ impl DagittyParser {
     }
 
     /// Parse dagitty format to create a casual graph.
-    pub fn parse_str(content: &str) -> Result<CausalGraph<NodeInfo, EdgeInfo>, Error<Rule>> {
-        let mut builder = CausalGraphBuilder::<NodeInfo, EdgeInfo>::new();
+    pub fn parse_str(
+        content: &str,
+    ) -> Result<CausalGraph<Arc<NodeInfo>, Arc<EdgeInfo>>, Error<Rule>> {
+        let mut builder = CausalGraphBuilder::<Arc<NodeInfo>, Arc<EdgeInfo>>::new();
         let mut parser = DagittyParser::parse(Rule::dagitty_graph, content)?;
         let mut dagitty_g = parser.next().unwrap().into_inner();
         let mut _strict = false;
@@ -223,9 +236,9 @@ impl<'a> AttrList<'a> {
             .map(|p| {
                 AttrList::parse(p)
                     .map(|alist| alist.elems)
-                    .unwrap_or(Vec::new())
+                    .unwrap_or_default()
             })
-            .unwrap_or(Vec::new());
+            .unwrap_or_default();
         v.push(alist);
         v.append(&mut tail);
 
@@ -257,12 +270,8 @@ impl<'a> AList<'a> {
         };
         let mut tail = inners
             .next()
-            .map(|p| {
-                AList::parse(p)
-                    .map(|alist| alist.elems)
-                    .unwrap_or(Vec::new())
-            })
-            .unwrap_or(Vec::new());
+            .map(|p| AList::parse(p).map(|alist| alist.elems).unwrap_or_default())
+            .unwrap_or_default();
         v.push((id1, id2));
         v.append(&mut tail);
 

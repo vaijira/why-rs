@@ -2,7 +2,7 @@ use crate::types::Point;
 use futures_signals::signal::Mutable;
 
 /// vertex type
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum VertexType {
     /// Default vertex type
     None,
@@ -30,7 +30,7 @@ pub enum EdgeType {
 }
 
 /// Node information to represent a vertex.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct NodeInfo {
     /// Node identifier.
     pub id: String,
@@ -38,18 +38,23 @@ pub struct NodeInfo {
     pub layout_pos: Mutable<Point<f64>>,
     /// Vertex type.
     pub vertex_type: Mutable<VertexType>,
-    /// Vertex path element.
-    pub vertex_path_element: Mutable<Option<web_sys::SvgPathElement>>,
+    /// Vertex path html id
+    pub vertex_path_id: Mutable<String>,
 }
 
 impl NodeInfo {
+    const DEFAULT_HTML_PATH_ID_PREFIX: &'static str = "node_path_id_";
     /// Create a new vertex.
     pub fn new(id: &str, layout_pos_x: f64, layout_pos_y: f64, vertex_type: VertexType) -> Self {
         NodeInfo {
             id: id.to_string(),
             layout_pos: Mutable::new(Point::new(layout_pos_x, layout_pos_y)),
             vertex_type: Mutable::new(vertex_type),
-            vertex_path_element: Mutable::new(None),
+            vertex_path_id: Mutable::new(format!(
+                "{}{}",
+                NodeInfo::DEFAULT_HTML_PATH_ID_PREFIX,
+                id
+            )),
         }
     }
 }

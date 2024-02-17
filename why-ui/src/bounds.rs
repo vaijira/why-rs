@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use why_data::{
     graph::{
         dagitty::{EdgeInfo, NodeInfo},
@@ -8,6 +10,26 @@ use why_data::{
 
 pub(crate) const VIEWBOX_WIDTH: u32 = 764;
 pub(crate) const VIEWBOX_HEIGHT: u32 = 764;
+
+#[derive(Copy, Clone, Debug)]
+pub(crate) struct ContainerCoordinates {
+    top: i32,
+    left: i32,
+}
+
+impl ContainerCoordinates {
+    pub fn new(top: i32, left: i32) -> Self {
+        Self { top, left }
+    }
+
+    pub fn top(&self) -> i32 {
+        self.top
+    }
+
+    pub fn left(&self) -> i32 {
+        self.left
+    }
+}
 
 #[derive(Copy, Clone, Debug)]
 pub struct Bounds {
@@ -21,7 +43,7 @@ pub struct Bounds {
 
 impl Bounds {
     pub(crate) fn calculate_bounds(
-        graph: &CausalGraph<NodeInfo, EdgeInfo>,
+        graph: &CausalGraph<Arc<NodeInfo>, Arc<EdgeInfo>>,
         height: i32,
         width: i32,
     ) -> Self {
@@ -33,7 +55,7 @@ impl Bounds {
 
         let width = if width > 0 { width as f64 } else { 0.0 };
 
-        let g: &Graph<NodeInfo, EdgeInfo> = match graph {
+        let g: &Graph<Arc<NodeInfo>, Arc<EdgeInfo>> = match graph {
             CausalGraph::Dag(g) => g,
             _ => unimplemented!("Not implemented yet"),
         };

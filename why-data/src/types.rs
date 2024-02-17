@@ -1,5 +1,5 @@
 /// Store 2D Point information
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Point<T: Copy> {
     x: T,
     y: T,

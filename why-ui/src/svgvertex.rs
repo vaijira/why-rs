@@ -1,6 +1,6 @@
 use dominator::{clone, events, svg, with_node, Dom};
 use futures_signals::signal::Mutable;
-use std::{rc::Rc, sync::Arc};
+use std::sync::Arc;
 use web_sys::{SvgGraphicsElement, SvgPathElement};
 use why_data::{
     graph::{dagitty::VertexType, CausalGraph, NodeIndex},
@@ -8,6 +8,7 @@ use why_data::{
 };
 
 use crate::svggraph::SvgGraph;
+
 #[derive(Clone, Debug)]
 pub struct SvgVertex {
     id: NodeIndex,
@@ -38,17 +39,18 @@ impl SvgVertex {
         })
     }
 
-    pub fn render(v: Arc<SvgVertex>, svg_graph: Rc<SvgGraph>) -> Dom {
-        let info = match &svg_graph.graph {
-            CausalGraph::Dag(g) => g.node_weight(v.id).unwrap(),
+    pub fn render(this: &Arc<Self>, svg_graph: &Arc<SvgGraph>) -> Dom {
+        let info = match &*svg_graph.graph.lock_ref() {
+            CausalGraph::Dag(g) => g.node_weight(this.id).unwrap().clone(),
             _ => unimplemented!(),
         };
 
         let children = vec![
             svg!("path" => SvgPathElement, {
+                .attr("id", &*info.vertex_path_id.lock_ref())
                 .attr("fill-opacity", "0.7")
                 .attr("z-index", "1")
-                .attr_signal("stroke-width", v.marked.signal_ref({|marked|
+                .attr_signal("stroke-width", this.marked.signal_ref({|marked|
                     if *marked {
                         "4.5"
                     } else {
@@ -76,14 +78,6 @@ impl SvgVertex {
                     }
                 }))
                 .attr("d", "M 0 0 m 20, 0 a 20,15 0 1,1 -40,0 a 20,15 0 1,1 40,0")
-                .with_node!(path_element => {
-                    .after_inserted(clone!(svg_graph, v  => move |_| {
-                        match &svg_graph.graph {
-                            CausalGraph::Dag(g) => *g.node_weight(v.id).unwrap().vertex_path_element.lock_mut() = Some(path_element),
-                            _ => unimplemented!(),
-                        };
-                    }))
-                })
             }),
             svg!("rect", {
                 .attr("fill", "#ffffff")
@@ -107,26 +101,29 @@ impl SvgVertex {
                 e.prevent_default();
             })
             .with_node!(graph_element => {
-                .event(clone!(v => move |e: events::PointerDown| {
-                    v.marked.set(!v.marked.get());
-                    v.dragging.set_neq(true);
+                .event(clone!(this, svg_graph => move |e: events::PointerDown| {
+                    this.marked.set(!this.marked.get());
+                    if this.marked.get() {
+                        svg_graph.current_variable.set(Some(info.clone()));
+                    }
+                    this.dragging.set_neq(true);
                     if graph_element.set_pointer_capture(e.pointer_id()).is_err() {
                         log::error!("Unable to capture pointer id for vertex");
                     }
                 }))
             })
-            .event(clone!(svg_graph, v => move |e: events::PointerMove| {
-                if v.dragging.get() {
-                    let info = match &svg_graph.graph {
-                        CausalGraph::Dag(g) => g.node_weight(v.id).unwrap(),
+            .event(clone!(svg_graph, this => move |e: events::PointerMove| {
+                if this.dragging.get() {
+                    let info = match &*svg_graph.graph.lock_ref() {
+                        CausalGraph::Dag(g) => g.node_weight(this.id).unwrap().clone(),
                         _ => unimplemented!(),
                     };
 
                     log::trace!("Vertex PointerMove event x:{} y:{}", e.x() , e.y());
                     log::trace!("Vertex PointerMove event page_x:{} page_y:{}", e.page_x() , e.page_y());
 
-                    let ptr_x = e.page_x() - svg_graph.container.lock_ref().as_ref().map(|element| element.client_left()).unwrap_or(0);
-                    let ptr_y = e.page_y() - svg_graph.container.lock_ref().as_ref().map(|element| element.client_top()).unwrap_or(0);
+                    let ptr_x = e.page_x() - svg_graph.container.lock_ref().as_ref().map(|container| container.left()).unwrap_or(0);
+                    let ptr_y = e.page_y() - svg_graph.container.lock_ref().as_ref().map(|container| container.top()).unwrap_or(0);
 
                     log::trace!("Vertex PointerMove event ptr_x:{} ptr_y:{}", ptr_x , ptr_y);
 
@@ -135,8 +132,8 @@ impl SvgVertex {
                     log::trace!("Vertex PointerMove after graph_coordinates x:{} y:{}", info.layout_pos.lock_ref().x() , info.layout_pos.lock_ref().y());
                 }
             }))
-            .event(clone!(v => move |_: events::PointerUp| {
-                v.dragging.set_neq(false);
+            .event(clone!(this => move |_: events::PointerUp| {
+                this.dragging.set_neq(false);
             }))
         })
     }

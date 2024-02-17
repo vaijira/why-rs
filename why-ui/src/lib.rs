@@ -30,7 +30,11 @@ pub fn main_js() -> Result<(), JsValue> {
 
     let app = App::new();
 
-    dominator::append_dom(&dominator::body(), App::render(app));
+    dominator::replace_dom(
+        &dominator::body().parent_node().unwrap(),
+        &dominator::body(),
+        App::render(&app),
+    );
 
     Ok(())
 }
