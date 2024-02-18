@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use dominator::{clone, events, html, with_node, Dom};
+use dominator::{clone, events, html, with_node, Dom, DomBuilder};
 use futures_signals::signal::{Mutable, SignalExt};
 use web_sys::HtmlElement;
 use why_data::graph::dagitty::{NodeInfo, VertexType};
@@ -56,26 +56,103 @@ impl App {
         })
     }
 
+    fn check_vertex_type(
+        dom: DomBuilder<HtmlElement>,
+        vertex_info: &Option<Arc<NodeInfo>>,
+        vertex_type: VertexType,
+    ) -> DomBuilder<HtmlElement> {
+        if vertex_info.is_some()
+            && *vertex_info.as_ref().unwrap().vertex_type.lock_ref() == vertex_type
+        {
+            dom.attr("checked", "checked")
+        } else {
+            dom
+        }
+    }
+
     fn variable_div(_this: &Arc<Self>, vertex_info: &Option<Arc<NodeInfo>>) -> Dom {
         html!("form", {
           .attr("autocomplete", "off")
           .child(Self::get_variable_name(vertex_info))
-          .child(html!("input", {
-            .attr("id", "selected_checkbox")
-            .attr("type", "checkbox")
-            .attr("alt", "Vertex selected")
-            .apply(|dom| {
-                if vertex_info.is_some() && *vertex_info.as_ref().unwrap().vertex_type.lock_ref() == VertexType::Selected {
-                    dom.attr("checked", "checked")
-                } else {
-                    dom
-                }
-            })
-            .attr("value", "selected")
+          .child(
+            html!("p", {
+              .child(
+                html!("input", {
+                  .attr("id", "exposure_radio")
+                  .attr("type", "radio")
+                  .attr("alt", "Exposure variable")
+                  .apply(|dom| Self::check_vertex_type(dom, vertex_info, VertexType::Exposure))
+                  .attr("value", "exposure")
+                }))
+              .child(
+                html!("label", {
+                  .attr("for", "exposure_radio")
+                  .text("exposure")
+                }))
            }))
-           .child(html!("label", {
-            .attr("for", "selected_checkbox")
-            .text("selected")
+          .child(
+             html!("p", {
+              .child(
+                html!("input", {
+                  .attr("id", "outcome_radio")
+                  .attr("type", "radio")
+                  .attr("alt", "Outcome variable")
+                  .apply(|dom| Self::check_vertex_type(dom, vertex_info, VertexType::Outcome))
+                  .attr("value", "outcome")
+                }))
+              .child(
+                html!("label", {
+                  .attr("for", "outcome_radio")
+                  .text("outcome")
+                }))
+           }))
+          .child(
+             html!("p", {
+              .child(
+                html!("input", {
+                  .attr("id", "adjusted_radio")
+                  .attr("type", "radio")
+                  .attr("alt", "Adjusted variable")
+                  .apply(|dom| Self::check_vertex_type(dom, vertex_info, VertexType::Adjusted))
+                  .attr("value", "adjusted")
+                }))
+              .child(
+                html!("label", {
+                  .attr("for", "adjusted_radio")
+                  .text("adjusted")
+                }))
+           }))
+           .child(
+             html!("p", {
+              .child(
+                html!("input", {
+                  .attr("id", "selected_radio")
+                  .attr("type", "radio")
+                  .attr("alt", "Selected variable")
+                  .apply(|dom| Self::check_vertex_type(dom, vertex_info, VertexType::Selected))
+                  .attr("value", "selected")
+                }))
+              .child(
+                html!("label", {
+                  .attr("for", "selected_radio")
+                  .text("selected")
+                }))
+           }))
+           .child(
+             html!("p", {
+              .child(
+                html!("input", {
+                  .attr("id", "unobserved_radio")
+                  .attr("type", "radio")
+                  .attr("alt", "Unobserved variable")
+                  .apply(|dom| Self::check_vertex_type(dom, vertex_info, VertexType::Unobserved))
+                  .attr("value", "unobserved")
+                }))
+              .child(
+                html!("label", {
+                  .attr("for", "unobserved_radio")
+                  .text("unobserved")
+                }))
            }))
         })
     }

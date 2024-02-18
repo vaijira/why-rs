@@ -104,7 +104,11 @@ impl SvgVertex {
                 .event(clone!(this, svg_graph => move |e: events::PointerDown| {
                     this.marked.set(!this.marked.get());
                     if this.marked.get() {
+                        svg_graph.vertexes.lock_mut().iter().for_each(|v| v.marked.set_neq(false));
+                        this.marked.set(true);
                         svg_graph.current_variable.set(Some(info.clone()));
+                    } else {
+                        svg_graph.current_variable.set(None);
                     }
                     this.dragging.set_neq(true);
                     if graph_element.set_pointer_capture(e.pointer_id()).is_err() {
