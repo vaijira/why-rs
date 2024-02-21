@@ -9,7 +9,7 @@ use why_parser::dagitty::DagittyParser;
 use crate::bounds::{Bounds, ContainerCoordinates};
 use crate::css::{
     LEFT_LEGEND_DIV_CLASS, MAIN_CLASS, MENU_DIV_CLASS, RIGHT_LEGEND_DIV_CLASS, SVG_DIV_CLASS,
-    TITLE_LEGEND_DIV_CLASS,
+    TEXTAREA_CLASS, TITLE_LEGEND_DIV_CLASS,
 };
 use crate::svggraph::SvgGraph;
 
@@ -30,6 +30,8 @@ E -> D
 
 pub struct App {
     graph_text: Mutable<String>,
+    variable_form_displayed: Mutable<bool>,
+    model_data_form_displayed: Mutable<bool>,
     svg_graph: Arc<SvgGraph>,
 }
 
@@ -42,6 +44,8 @@ impl App {
 
         Arc::new(Self {
             graph_text: Mutable::new(DEFAULT_GRAPH.into()),
+            variable_form_displayed: Mutable::new(true),
+            model_data_form_displayed: Mutable::new(true),
             svg_graph: SvgGraph::new(g),
         })
     }
@@ -162,9 +166,32 @@ impl App {
             .class(&*LEFT_LEGEND_DIV_CLASS)
             .child(html!("h3", {
               .class(&*TITLE_LEGEND_DIV_CLASS)
-              .text("Variable")
+              .child(html!("img" , {
+                .attr("id", "a_variable")
+                .attr_signal("src", this.variable_form_displayed.signal().map(
+                  |displayed| if displayed {
+                    "images/arrow-down.png"
+                  } else {
+                    "images/arrow-right.png"
+                  }
+                ))
+                .attr_signal("alt", this.variable_form_displayed.signal().map(
+                  |displayed| if displayed {
+                    "arrow pointing down"
+                  } else {
+                    "arrow pointing right"
+                  }
+                ))
+                .with_node!(_image_element => {
+                  .event(clone!(this => move |_: events::Click| {
+                    this.variable_form_displayed.set(!this.variable_form_displayed.get());
+                  }))
+                })
+              }))
+              .text(" Variable")
             }))
             .child(html!("div", {
+              .visible_signal(this.variable_form_displayed.signal())
               .child_signal(this.svg_graph.current_variable.signal_cloned().map(
                 clone!(this => move |variable| {
                   Some(Self::variable_div(&this, &variable))
@@ -179,16 +206,44 @@ impl App {
             .children(&mut [
                 html!("h3", {
                     .class(&*TITLE_LEGEND_DIV_CLASS)
+                    .child(html!("img" , {
+                      .attr("id", "a_variable")
+                      .attr_signal("src", this.model_data_form_displayed.signal().map(
+                        |displayed| if displayed {
+                          "images/arrow-down.png"
+                        } else {
+                          "images/arrow-right.png"
+                        }
+                      ))
+                      .attr_signal("alt", this.model_data_form_displayed.signal().map(
+                        |displayed| if displayed {
+                          "arrow pointing down"
+                        } else {
+                          "arrow pointing right"
+                        }
+                      ))
+                      .with_node!(_image_element => {
+                        .event(clone!(this => move |_: events::Click| {
+                          this.model_data_form_displayed.set(!this.model_data_form_displayed.get());
+                        }))
+                      })
+                    }))
                     .text("Model code")
                 }),
                 html!("div", {
-                    .child_signal(this.graph_text.signal_cloned().map(
+                    .visible_signal(this.model_data_form_displayed.signal())
+                    .child(html!("form", {
+                      .child_signal(this.graph_text.signal_cloned().map(
                         clone!(this => move |_| {
                             Some(html!("textarea", {
+                                .class(&*TEXTAREA_CLASS)
+                                .attr("rows", "10")
+                                .attr("cols", "35")
                                 .text(&this.graph_text.get_cloned())
                             }))
                         })
-                    ))
+                      ))
+                    }))
                 }),
             ])
         })

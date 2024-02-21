@@ -73,6 +73,14 @@ pub(crate) static TITLE_LEGEND_DIV_CLASS: Lazy<String> = Lazy::new(|| {
     }
 });
 
+pub(crate) static TEXTAREA_CLASS: Lazy<String> = Lazy::new(|| {
+    class! {
+        .style("font-family", "monospace")
+        .style("width", "100%")
+        .style("box-sizing", "border-box")
+    }
+});
+
 pub(crate) static PATH_CLASS: Lazy<String> = Lazy::new(|| {
     class! {}
 });
