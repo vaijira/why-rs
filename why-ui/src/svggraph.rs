@@ -16,12 +16,28 @@ use crate::{
     svgvertex::SvgVertex,
 };
 
+pub(crate) const DEFAULT_GRAPH: &str = r#"
+dag {
+A [selected,pos="-2.200,-1.520"]
+B [pos="1.400,-1.460"]
+D [outcome,pos="1.400,1.621"]
+E [exposure,pos="-2.200,1.597"]
+Z [adjusted,pos="-0.300,-0.082"]
+A -> E
+A -> Z [pos="-0.791,-1.045"]
+B -> D
+B -> Z [pos="0.680,-0.496"]
+E -> D
+}
+"#;
+
 pub struct SvgGraph {
     pub(crate) graph: Mutable<CausalGraph<Arc<NodeInfo>, Arc<EdgeInfo>>>,
     pub(crate) container: Mutable<Option<ContainerCoordinates>>,
     pub(crate) vertexes: MutableVec<Arc<SvgVertex>>,
     pub(crate) edges: MutableVec<Arc<SvgEdge>>,
     pub(crate) bounds: Mutable<Bounds>,
+    pub(crate) model_data: Mutable<String>,
     pub(crate) current_variable: Mutable<Option<Arc<NodeInfo>>>,
 }
 
@@ -49,6 +65,7 @@ impl SvgGraph {
             vertexes,
             edges,
             bounds: Mutable::new(bounds),
+            model_data: Mutable::new(DEFAULT_GRAPH.into()),
             current_variable: Mutable::new(None),
         })
     }

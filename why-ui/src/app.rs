@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use dominator::{clone, events, html, with_node, Dom};
-use futures_signals::signal::{Mutable, SignalExt};
+use futures_signals::signal::SignalExt;
 use web_sys::HtmlElement;
 use why_parser::dagitty::DagittyParser;
 
@@ -10,26 +10,10 @@ use crate::css::{
     LEFT_LEGEND_DIV_CLASS, MAIN_CLASS, MENU_DIV_CLASS, RIGHT_LEGEND_DIV_CLASS, SVG_DIV_CLASS,
 };
 use crate::model_data_section::ModelDataSection;
-use crate::svggraph::SvgGraph;
+use crate::svggraph::{SvgGraph, DEFAULT_GRAPH};
 use crate::variable_section::VariableSection;
 
-const DEFAULT_GRAPH: &str = r#"
-dag {
-A [selected,pos="-2.200,-1.520"]
-B [pos="1.400,-1.460"]
-D [outcome,pos="1.400,1.621"]
-E [exposure,pos="-2.200,1.597"]
-Z [adjusted,pos="-0.300,-0.082"]
-A -> E
-A -> Z [pos="-0.791,-1.045"]
-B -> D
-B -> Z [pos="0.680,-0.496"]
-E -> D
-}
-"#;
-
 pub struct App {
-    model_data: Mutable<String>,
     svg_graph: Arc<SvgGraph>,
 }
 
@@ -41,7 +25,6 @@ impl App {
         };
 
         Arc::new(Self {
-            model_data: Mutable::new(DEFAULT_GRAPH.into()),
             svg_graph: SvgGraph::new(g),
         })
     }
@@ -58,7 +41,7 @@ impl App {
         let model_data_section = ModelDataSection::new();
         html!("div", {
             .class(&*RIGHT_LEGEND_DIV_CLASS)
-            .child(ModelDataSection::render(&model_data_section, &this.model_data))
+            .child(ModelDataSection::render(&model_data_section, &this.svg_graph))
         })
     }
 
