@@ -136,8 +136,8 @@ impl VariableSection {
             .child(html!("div", {
                 .visible_signal(this.displayed.signal())
                 .child_signal(svg_graph.current_variable.signal_cloned().map(
-                  clone!(this => move |variable| {
-                  Some(Self::div(&this, &variable))
+                    clone!(this => move |variable| {
+                    Some(Self::div(&this, &variable))
                 })))
             }))
         })

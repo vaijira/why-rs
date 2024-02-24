@@ -18,24 +18,24 @@ impl SectionHeader {
             .class(&*TITLE_LEGEND_DIV_CLASS)
             .child(html!("img" , {
                 .attr("id", &this.id)
-                .attr_signal("src", displayed.signal().map(
-                    |displayed| if displayed {
+                .attr_signal("src", displayed.signal().map( |displayed|
+                    if displayed {
                         "images/arrow-down.png"
                     } else {
                         "images/arrow-right.png"
                     }
-                    ))
-                .attr_signal("alt", displayed.signal().map(
-                    |displayed| if displayed {
+                ))
+                .attr_signal("alt", displayed.signal().map( |displayed|
+                    if displayed {
                         "arrow pointing down"
                     } else {
                         "arrow pointing right"
                     }
                 ))
                 .with_node!(_image_element => {
-                .event(clone!(displayed => move |_: events::Click| {
-                    displayed.set(!displayed.get());
-                }))
+                    .event(clone!(displayed => move |_: events::Click| {
+                        displayed.set(!displayed.get());
+                    }))
                 })
             }))
             .text(&this.title)

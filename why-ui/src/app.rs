@@ -49,8 +49,8 @@ impl App {
     fn left_side_tag(this: &Arc<Self>) -> Dom {
         let variable_section = VariableSection::new();
         html!("div", {
-          .class(&*LEFT_LEGEND_DIV_CLASS)
-          .child(VariableSection::render(&variable_section, &this.svg_graph))
+            .class(&*LEFT_LEGEND_DIV_CLASS)
+            .child(VariableSection::render(&variable_section, &this.svg_graph))
         })
     }
 
