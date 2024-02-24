@@ -56,6 +56,13 @@ impl App {
         )
     }
 
+    fn resize(this: &Arc<Self>, element: &HtmlElement) {
+        let h = element.offset_height() - 4;
+        let w = element.offset_width() - 4;
+        log::debug!("Resizing new height:{} width:{}", h, w);
+        *this.svg_graph.bounds.lock_mut() = Bounds::calculate_bounds(&this.svg_graph.graph.lock_ref(), h, w);
+    }
+
     fn main_tag(this: &Arc<Self>) -> Dom {
         html!("main", {
             .class(&*MAIN_CLASS)
@@ -64,26 +71,23 @@ impl App {
                     .class(&*MENU_DIV_CLASS)
                 }),
                 html!("div" => HtmlElement, {
-                    .class(&*SVG_DIV_CLASS)
-                    .with_node!(element => {
-                        .after_inserted(clone!(this  => move |_| {
-                            *this.svg_graph.container.lock_mut() = Some(ContainerCoordinates::new(element.client_top(), element.client_left()));
-                        }))
-                    })
-                    .child_signal(this.svg_graph.bounds.signal().map(
+                   .class(&*SVG_DIV_CLASS)
+                   .child_signal(this.svg_graph.bounds.signal().map(
                         clone!(this => move |_| {
                              log::debug!("Rerendering graph");
                              Some(SvgGraph::render(&this.svg_graph))
                          })
                     ))
                     .with_node!(element => {
-                        .global_event(clone!(this => move |_: events::Resize| {
-                            let h = element.offset_height() - 4;
-                            let w = element.offset_width() - 4;
-                            log::debug!("Resizing new height:{} width:{}", h, w);
-                            *this.svg_graph.bounds.lock_mut() = Bounds::calculate_bounds(&this.svg_graph.graph.lock_ref(), h, w);
+                        .after_inserted(clone!(this  => move |_| {
+                            *this.svg_graph.container.lock_mut() = Some(ContainerCoordinates::new(element.client_top(), element.client_left()));
+                            Self::resize(&this, &element)
                         }))
-
+                    })
+                    .with_node!(element => {
+                        .global_event(clone!(this => move |_: events::Resize| {
+                            Self::resize(&this, &element)
+                        }))
                     })
                 })
             ])

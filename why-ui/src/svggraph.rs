@@ -92,8 +92,8 @@ impl SvgGraph {
             ))
             .attr_signal("width", this.bounds.signal().map(
                 clone!(this => move |_| {
-                     log::debug!("setting svg width: {}", this.bounds.get().height);
-                     this.bounds.get().height.to_string()
+                     log::debug!("setting svg width: {}", this.bounds.get().width);
+                     this.bounds.get().width.to_string()
                  })
             ))
             .children_signal_vec(
