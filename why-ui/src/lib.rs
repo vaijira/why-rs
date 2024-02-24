@@ -11,9 +11,12 @@
 mod app;
 mod bounds;
 mod css;
+mod model_data_section;
+mod section_header;
 mod svgedge;
 mod svggraph;
 mod svgvertex;
+mod variable_section;
 
 use app::App;
 use wasm_bindgen::prelude::*;

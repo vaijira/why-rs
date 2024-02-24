@@ -1,17 +1,17 @@
 use std::sync::Arc;
 
-use dominator::{clone, events, html, with_node, Dom, DomBuilder};
+use dominator::{clone, events, html, with_node, Dom};
 use futures_signals::signal::{Mutable, SignalExt};
 use web_sys::HtmlElement;
-use why_data::graph::dagitty::{NodeInfo, VertexType};
 use why_parser::dagitty::DagittyParser;
 
 use crate::bounds::{Bounds, ContainerCoordinates};
 use crate::css::{
     LEFT_LEGEND_DIV_CLASS, MAIN_CLASS, MENU_DIV_CLASS, RIGHT_LEGEND_DIV_CLASS, SVG_DIV_CLASS,
-    TEXTAREA_CLASS, TITLE_LEGEND_DIV_CLASS,
 };
+use crate::model_data_section::ModelDataSection;
 use crate::svggraph::SvgGraph;
+use crate::variable_section::VariableSection;
 
 const DEFAULT_GRAPH: &str = r#"
 dag {
@@ -29,9 +29,7 @@ E -> D
 "#;
 
 pub struct App {
-    graph_text: Mutable<String>,
-    variable_form_displayed: Mutable<bool>,
-    model_data_form_displayed: Mutable<bool>,
+    model_data: Mutable<String>,
     svg_graph: Arc<SvgGraph>,
 }
 
@@ -43,209 +41,24 @@ impl App {
         };
 
         Arc::new(Self {
-            graph_text: Mutable::new(DEFAULT_GRAPH.into()),
-            variable_form_displayed: Mutable::new(true),
-            model_data_form_displayed: Mutable::new(true),
+            model_data: Mutable::new(DEFAULT_GRAPH.into()),
             svg_graph: SvgGraph::new(g),
         })
     }
 
-    fn get_variable_name(vertex_info: &Option<Arc<NodeInfo>>) -> Dom {
-        html!("p", {
-            .child(html!("span", {
-                .attr("id", "variable_label")
-                .style("font-weight", "bold")
-                .text(vertex_info.as_ref().map_or("", |v| &v.id ))
-            }))
-        })
-    }
-
-    fn check_vertex_type(
-        dom: DomBuilder<HtmlElement>,
-        vertex_info: &Option<Arc<NodeInfo>>,
-        vertex_type: VertexType,
-    ) -> DomBuilder<HtmlElement> {
-        if vertex_info.is_some()
-            && *vertex_info.as_ref().unwrap().vertex_type.lock_ref() == vertex_type
-        {
-            dom.attr("checked", "checked")
-        } else {
-            dom
-        }
-    }
-
-    fn variable_div(_this: &Arc<Self>, vertex_info: &Option<Arc<NodeInfo>>) -> Dom {
-        html!("form", {
-          .attr("autocomplete", "off")
-          .child(Self::get_variable_name(vertex_info))
-          .child(
-            html!("p", {
-              .child(
-                html!("input", {
-                  .attr("id", "exposure_radio")
-                  .attr("type", "radio")
-                  .attr("alt", "Exposure variable")
-                  .apply(|dom| Self::check_vertex_type(dom, vertex_info, VertexType::Exposure))
-                  .attr("value", "exposure")
-                }))
-              .child(
-                html!("label", {
-                  .attr("for", "exposure_radio")
-                  .text("exposure")
-                }))
-           }))
-          .child(
-             html!("p", {
-              .child(
-                html!("input", {
-                  .attr("id", "outcome_radio")
-                  .attr("type", "radio")
-                  .attr("alt", "Outcome variable")
-                  .apply(|dom| Self::check_vertex_type(dom, vertex_info, VertexType::Outcome))
-                  .attr("value", "outcome")
-                }))
-              .child(
-                html!("label", {
-                  .attr("for", "outcome_radio")
-                  .text("outcome")
-                }))
-           }))
-          .child(
-             html!("p", {
-              .child(
-                html!("input", {
-                  .attr("id", "adjusted_radio")
-                  .attr("type", "radio")
-                  .attr("alt", "Adjusted variable")
-                  .apply(|dom| Self::check_vertex_type(dom, vertex_info, VertexType::Adjusted))
-                  .attr("value", "adjusted")
-                }))
-              .child(
-                html!("label", {
-                  .attr("for", "adjusted_radio")
-                  .text("adjusted")
-                }))
-           }))
-           .child(
-             html!("p", {
-              .child(
-                html!("input", {
-                  .attr("id", "selected_radio")
-                  .attr("type", "radio")
-                  .attr("alt", "Selected variable")
-                  .apply(|dom| Self::check_vertex_type(dom, vertex_info, VertexType::Selected))
-                  .attr("value", "selected")
-                }))
-              .child(
-                html!("label", {
-                  .attr("for", "selected_radio")
-                  .text("selected")
-                }))
-           }))
-           .child(
-             html!("p", {
-              .child(
-                html!("input", {
-                  .attr("id", "unobserved_radio")
-                  .attr("type", "radio")
-                  .attr("alt", "Unobserved variable")
-                  .apply(|dom| Self::check_vertex_type(dom, vertex_info, VertexType::Unobserved))
-                  .attr("value", "unobserved")
-                }))
-              .child(
-                html!("label", {
-                  .attr("for", "unobserved_radio")
-                  .text("unobserved")
-                }))
-           }))
-        })
-    }
-
     fn left_side_tag(this: &Arc<Self>) -> Dom {
+        let variable_section = VariableSection::new();
         html!("div", {
-            .class(&*LEFT_LEGEND_DIV_CLASS)
-            .child(html!("h3", {
-              .class(&*TITLE_LEGEND_DIV_CLASS)
-              .child(html!("img" , {
-                .attr("id", "a_variable")
-                .attr_signal("src", this.variable_form_displayed.signal().map(
-                  |displayed| if displayed {
-                    "images/arrow-down.png"
-                  } else {
-                    "images/arrow-right.png"
-                  }
-                ))
-                .attr_signal("alt", this.variable_form_displayed.signal().map(
-                  |displayed| if displayed {
-                    "arrow pointing down"
-                  } else {
-                    "arrow pointing right"
-                  }
-                ))
-                .with_node!(_image_element => {
-                  .event(clone!(this => move |_: events::Click| {
-                    this.variable_form_displayed.set(!this.variable_form_displayed.get());
-                  }))
-                })
-              }))
-              .text(" Variable")
-            }))
-            .child(html!("div", {
-              .visible_signal(this.variable_form_displayed.signal())
-              .child_signal(this.svg_graph.current_variable.signal_cloned().map(
-                clone!(this => move |variable| {
-                  Some(Self::variable_div(&this, &variable))
-                })))
-            }))
+          .class(&*LEFT_LEGEND_DIV_CLASS)
+          .child(VariableSection::render(&variable_section, &this.svg_graph))
         })
     }
 
     fn right_side_tag(this: &Arc<Self>) -> Dom {
+        let model_data_section = ModelDataSection::new();
         html!("div", {
             .class(&*RIGHT_LEGEND_DIV_CLASS)
-            .children(&mut [
-                html!("h3", {
-                    .class(&*TITLE_LEGEND_DIV_CLASS)
-                    .child(html!("img" , {
-                      .attr("id", "a_variable")
-                      .attr_signal("src", this.model_data_form_displayed.signal().map(
-                        |displayed| if displayed {
-                          "images/arrow-down.png"
-                        } else {
-                          "images/arrow-right.png"
-                        }
-                      ))
-                      .attr_signal("alt", this.model_data_form_displayed.signal().map(
-                        |displayed| if displayed {
-                          "arrow pointing down"
-                        } else {
-                          "arrow pointing right"
-                        }
-                      ))
-                      .with_node!(_image_element => {
-                        .event(clone!(this => move |_: events::Click| {
-                          this.model_data_form_displayed.set(!this.model_data_form_displayed.get());
-                        }))
-                      })
-                    }))
-                    .text("Model code")
-                }),
-                html!("div", {
-                    .visible_signal(this.model_data_form_displayed.signal())
-                    .child(html!("form", {
-                      .child_signal(this.graph_text.signal_cloned().map(
-                        clone!(this => move |_| {
-                            Some(html!("textarea", {
-                                .class(&*TEXTAREA_CLASS)
-                                .attr("rows", "10")
-                                .attr("cols", "35")
-                                .text(&this.graph_text.get_cloned())
-                            }))
-                        })
-                      ))
-                    }))
-                }),
-            ])
+            .child(ModelDataSection::render(&model_data_section, &this.model_data))
         })
     }
 
