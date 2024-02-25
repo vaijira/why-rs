@@ -106,8 +106,8 @@ impl SvgGraph {
                 this.edges.signal_vec_cloned()
                 .map(clone!(this => move |edge| {
                     SvgEdge::render(&edge, &this)
-                }))
-            )
+                })
+            ))
         })
     }
 }

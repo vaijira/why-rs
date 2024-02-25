@@ -60,7 +60,8 @@ impl App {
         let h = element.offset_height() - 4;
         let w = element.offset_width() - 4;
         log::debug!("Resizing new height:{} width:{}", h, w);
-        *this.svg_graph.bounds.lock_mut() = Bounds::calculate_bounds(&this.svg_graph.graph.lock_ref(), h, w);
+        *this.svg_graph.bounds.lock_mut() =
+            Bounds::calculate_bounds(&this.svg_graph.graph.lock_ref(), h, w);
     }
 
     fn main_tag(this: &Arc<Self>) -> Dom {
