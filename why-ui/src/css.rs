@@ -84,3 +84,10 @@ pub(crate) static TEXTAREA_CLASS: Lazy<String> = Lazy::new(|| {
 pub(crate) static PATH_CLASS: Lazy<String> = Lazy::new(|| {
     class! {}
 });
+
+pub(crate) static BUTTON_CLASS: Lazy<String> = Lazy::new(|| {
+    class! {
+        .style("border", "1px solid #700")
+        .style("background-color", "white")
+    }
+});

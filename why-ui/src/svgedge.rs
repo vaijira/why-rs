@@ -12,7 +12,7 @@ use why_data::{
 
 #[derive(Clone, Debug)]
 pub struct SvgEdge {
-    id: EdgeIndex,
+    pub(crate) id: EdgeIndex,
     marked: Mutable<bool>,
     dragging: Mutable<bool>,
 }

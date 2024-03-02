@@ -1,10 +1,11 @@
-use crate::section_header::SectionHeader;
 use crate::svggraph::SvgGraph;
+use crate::{css::BUTTON_CLASS, section_header::SectionHeader};
 use dominator::{clone, events, html, with_node, Dom, DomBuilder};
 use futures_signals::signal::{Mutable, SignalExt};
 use std::sync::Arc;
 use web_sys::HtmlInputElement;
 use why_data::graph::dagitty::{NodeInfo, VertexType};
+use why_data::graph::CausalGraph;
 
 pub struct VariableSection {
     header: Arc<SectionHeader>,
@@ -19,23 +20,22 @@ impl VariableSection {
         })
     }
 
-    fn get_variable_name(vertex_info: &Option<Arc<NodeInfo>>) -> Dom {
+    fn get_variable_name(node_info: &Option<Arc<NodeInfo>>) -> Dom {
         html!("p", {
             .child(html!("span", {
                 .attr("id", "variable_label")
                 .style("font-weight", "bold")
-                .text(vertex_info.as_ref().map_or("", |v| &v.id ))
+                .text(node_info.as_ref().map_or("", |v| &v.id ))
             }))
         })
     }
 
     fn check_vertex_type(
         dom: DomBuilder<HtmlInputElement>,
-        vertex_info: &Option<Arc<NodeInfo>>,
+        node_info: &Option<Arc<NodeInfo>>,
         vertex_type: VertexType,
     ) -> DomBuilder<HtmlInputElement> {
-        if vertex_info.is_some()
-            && *vertex_info.as_ref().unwrap().vertex_type.lock_ref() == vertex_type
+        if node_info.is_some() && *node_info.as_ref().unwrap().vertex_type.lock_ref() == vertex_type
         {
             dom.attr("checked", "checked")
         } else {
@@ -45,30 +45,68 @@ impl VariableSection {
 
     fn update_vertex_type(
         svg_graph: &Arc<SvgGraph>,
-        vertex_info: &Option<Arc<NodeInfo>>,
+        node_info: &Option<Arc<NodeInfo>>,
         vertex_type: VertexType,
     ) {
-        if let Some(ref node) = vertex_info {
+        if let Some(ref node) = node_info {
             *node.vertex_type.lock_mut() = vertex_type;
             *svg_graph.current_variable.lock_mut() = Some(node.clone());
         }
     }
 
-    fn div(svg_graph: &Arc<SvgGraph>, vertex_info: &Option<Arc<NodeInfo>>) -> Dom {
+    fn remove_vertex(svg_graph: &Arc<SvgGraph>, node_info: &Option<Arc<NodeInfo>>) {
+        if let Some(ref node) = node_info {
+            let node_index = {
+                match &*svg_graph.graph.lock_ref() {
+                    CausalGraph::Dag(g) => g.node_indices().find(|i| g[*i].id == node.id).unwrap(),
+                    _ => unimplemented!(),
+                }
+            };
+            let node_edges = svg_graph.graph.lock_ref().edges(node_index);
+            svg_graph.vertexes.lock_mut().retain(|v| node_index != v.id);
+            svg_graph
+                .edges
+                .lock_mut()
+                .retain(|v| !node_edges.contains(&v.id));
+            (*svg_graph.graph.lock_mut()).remove_node(node_index);
+            *svg_graph.current_variable.lock_mut() = None;
+        }
+    }
+
+    fn div(svg_graph: &Arc<SvgGraph>, node_info: &Option<Arc<NodeInfo>>) -> Dom {
         html!("form", {
             .attr("autocomplete", "off")
-            .child(Self::get_variable_name(vertex_info))
+            .child(Self::get_variable_name(node_info))
+            .child(html!("p", {
+                .child(html!("input" => HtmlInputElement, {
+                    .attr("id", "none_radio")
+                    .attr("name", "variable_type")
+                    .attr("type", "radio")
+                    .attr("alt", "None variable")
+                    .apply(|dom| Self::check_vertex_type(dom, node_info, VertexType::None))
+                    .attr("value", "exposure")
+                    .with_node!(_input_element => {
+                        .event(clone!(svg_graph, node_info => move |_: events::Click| {
+                            Self::update_vertex_type(&svg_graph, &node_info, VertexType::None);
+                        }))
+                    })
+                }))
+                .child(html!("label", {
+                    .attr("for", "none_radio")
+                    .text("none")
+                }))
+            }))
             .child(html!("p", {
                 .child(html!("input" => HtmlInputElement, {
                     .attr("id", "exposure_radio")
                     .attr("name", "variable_type")
                     .attr("type", "radio")
                     .attr("alt", "Exposure variable")
-                    .apply(|dom| Self::check_vertex_type(dom, vertex_info, VertexType::Exposure))
+                    .apply(|dom| Self::check_vertex_type(dom, node_info, VertexType::Exposure))
                     .attr("value", "exposure")
                     .with_node!(_input_element => {
-                        .event(clone!(svg_graph, vertex_info => move |_: events::Click| {
-                            Self::update_vertex_type(&svg_graph, &vertex_info, VertexType::Exposure);
+                        .event(clone!(svg_graph, node_info => move |_: events::Click| {
+                            Self::update_vertex_type(&svg_graph, &node_info, VertexType::Exposure);
                         }))
                     })
                 }))
@@ -83,11 +121,11 @@ impl VariableSection {
                     .attr("name", "variable_type")
                     .attr("type", "radio")
                     .attr("alt", "Outcome variable")
-                    .apply(|dom| Self::check_vertex_type(dom, vertex_info, VertexType::Outcome))
+                    .apply(|dom| Self::check_vertex_type(dom, node_info, VertexType::Outcome))
                     .attr("value", "outcome")
                     .with_node!(_input_element => {
-                        .event(clone!(svg_graph, vertex_info => move |_: events::Click| {
-                            Self::update_vertex_type(&svg_graph, &vertex_info, VertexType::Outcome);
+                        .event(clone!(svg_graph, node_info => move |_: events::Click| {
+                            Self::update_vertex_type(&svg_graph, &node_info, VertexType::Outcome);
                         }))
                     })
                  }))
@@ -102,11 +140,11 @@ impl VariableSection {
                     .attr("name", "variable_type")
                     .attr("type", "radio")
                     .attr("alt", "Adjusted variable")
-                    .apply(|dom| Self::check_vertex_type(dom, vertex_info, VertexType::Adjusted))
+                    .apply(|dom| Self::check_vertex_type(dom, node_info, VertexType::Adjusted))
                     .attr("value", "adjusted")
                     .with_node!(_input_element => {
-                        .event(clone!(svg_graph, vertex_info => move |_: events::Click| {
-                            Self::update_vertex_type(&svg_graph, &vertex_info, VertexType::Adjusted);
+                        .event(clone!(svg_graph, node_info => move |_: events::Click| {
+                            Self::update_vertex_type(&svg_graph, &node_info, VertexType::Adjusted);
                         }))
                     })
                  }))
@@ -121,11 +159,11 @@ impl VariableSection {
                     .attr("name", "variable_type")
                     .attr("type", "radio")
                     .attr("alt", "Selected variable")
-                    .apply(|dom| Self::check_vertex_type(dom, vertex_info, VertexType::Selected))
+                    .apply(|dom| Self::check_vertex_type(dom, node_info, VertexType::Selected))
                     .attr("value", "selected")
                     .with_node!(_input_element => {
-                        .event(clone!(svg_graph, vertex_info => move |_: events::Click| {
-                            Self::update_vertex_type(&svg_graph, &vertex_info, VertexType::Selected);
+                        .event(clone!(svg_graph, node_info => move |_: events::Click| {
+                            Self::update_vertex_type(&svg_graph, &node_info, VertexType::Selected);
                         }))
                     })
                  }))
@@ -140,11 +178,11 @@ impl VariableSection {
                     .attr("name", "variable_type")
                     .attr("type", "radio")
                     .attr("alt", "Unobserved variable")
-                    .apply(|dom| Self::check_vertex_type(dom, vertex_info, VertexType::Unobserved))
+                    .apply(|dom| Self::check_vertex_type(dom, node_info, VertexType::Unobserved))
                     .attr("value", "unobserved")
                     .with_node!(_input_element => {
-                        .event(clone!(svg_graph, vertex_info => move |_: events::Click| {
-                            Self::update_vertex_type(&svg_graph, &vertex_info, VertexType::Unobserved);
+                        .event(clone!(svg_graph, node_info => move |_: events::Click| {
+                            Self::update_vertex_type(&svg_graph, &node_info, VertexType::Unobserved);
                         }))
                     })
                  }))
@@ -152,6 +190,24 @@ impl VariableSection {
                     .attr("for", "unobserved_radio")
                     .text("unobserved")
                 }))
+            }))
+            .child(html!("p", {
+                .child(html!("button", {
+                    .class(&*BUTTON_CLASS)
+                    .attr("type", "button")
+                    .text("delete")
+                    .with_node!(_element => {
+                        .event(clone!(svg_graph, node_info => move |_: events::Click| {
+                            Self::remove_vertex(&svg_graph, &node_info);
+                        }))
+                    })
+                }))
+                .child(html!("button", {
+                    .class(&*BUTTON_CLASS)
+                    .attr("type", "button")
+                    .text("rename")
+                }))
+
             }))
         })
     }

@@ -11,7 +11,7 @@ use crate::svggraph::SvgGraph;
 
 #[derive(Clone, Debug)]
 pub struct SvgVertex {
-    id: NodeIndex,
+    pub(crate) id: NodeIndex,
     marked: Mutable<bool>,
     dragging: Mutable<bool>,
 }

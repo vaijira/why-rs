@@ -4,8 +4,9 @@ pub mod dagitty;
 use std::collections::HashSet;
 use std::fmt::Debug;
 
+use petgraph::visit::EdgeRef;
 pub use petgraph::{
-    graph::{DiGraph, UnGraph},
+    graph::{DiGraph, Edges, UnGraph},
     graph::{EdgeIndex, NodeIndex},
     graph::{IndexType, WalkNeighbors},
     stable_graph::DefaultIx,
@@ -42,6 +43,22 @@ impl<N, E, Ix: IndexType> CausalGraph<N, E, Ix> {
         match self {
             Self::Dag(g) => g.add_edge(left, right, e),
             Self::Ungraph(g) => g.add_edge(left, right, e),
+        }
+    }
+
+    /// Edges from  node.
+    pub fn edges(&self, n: NodeIndex<Ix>) -> Vec<EdgeIndex<Ix>> {
+        match self {
+            Self::Dag(g) => g.edges(n).map(|e| e.id()).collect(),
+            Self::Ungraph(g) => g.edges(n).map(|e| e.id()).collect(),
+        }
+    }
+
+    /// Remove node.
+    pub fn remove_node(&mut self, n: NodeIndex<Ix>) -> Option<N> {
+        match self {
+            Self::Dag(g) => g.remove_node(n),
+            Self::Ungraph(g) => g.remove_node(n),
         }
     }
 }
