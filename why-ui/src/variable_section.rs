@@ -69,6 +69,8 @@ impl VariableSection {
                 .lock_mut()
                 .retain(|v| !node_edges.contains(&v.id));
             (*svg_graph.graph.lock_mut()).remove_node(node_index);
+            let model_data = svg_graph.graph.lock_ref().to_string();
+            *svg_graph.model_data.lock_mut() = model_data;
             *svg_graph.current_variable.lock_mut() = None;
         }
     }

@@ -1,5 +1,8 @@
 use crate::types::Point;
 use futures_signals::signal::Mutable;
+use std::sync::Arc;
+
+use super::CausalGraph;
 
 /// vertex type
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -16,6 +19,21 @@ pub enum VertexType {
     Selected,
     /// Unobserved vertex
     Unobserved,
+}
+
+impl ToString for VertexType {
+    fn to_string(&self) -> String {
+        let result = match &self {
+            VertexType::None => "",
+            VertexType::Adjusted => "adjusted",
+            VertexType::Exposure => "exposure",
+            VertexType::Outcome => "outcome",
+            VertexType::Selected => "selected",
+            VertexType::Unobserved => "unobserved",
+        };
+
+        result.to_string()
+    }
 }
 
 /// edge type
@@ -59,6 +77,25 @@ impl NodeInfo {
     }
 }
 
+impl ToString for NodeInfo {
+    fn to_string(&self) -> String {
+        if *self.vertex_type.lock_ref() == VertexType::None {
+            format!(
+                r#"{} [pos="{}"]"#,
+                self.id,
+                self.layout_pos.lock_ref().to_string()
+            )
+        } else {
+            format!(
+                r#"{} [{},pos="{}"]"#,
+                self.id,
+                self.vertex_type.lock_ref().to_string(),
+                self.layout_pos.lock_ref().to_string()
+            )
+        }
+    }
+}
+
 /// Edge information to represent a edge.
 #[derive(Debug)]
 pub struct EdgeInfo {
@@ -78,5 +115,68 @@ impl EdgeInfo {
             layout_pos: Mutable::new(layout_pos),
             edge_type: Mutable::new(edge_type),
         }
+    }
+}
+
+impl ToString for EdgeInfo {
+    fn to_string(&self) -> String {
+        if self.layout_pos.lock_ref().is_some() {
+            format!(" [pos={}]", self.layout_pos.lock_ref().unwrap().to_string())
+        } else {
+            "".to_string()
+        }
+    }
+}
+
+impl ToString for CausalGraph<Arc<NodeInfo>, Arc<EdgeInfo>> {
+    fn to_string(&self) -> String {
+        let mut result = match self {
+            CausalGraph::Dag(_dag) => "dag {\n".to_string(),
+            CausalGraph::Ungraph(_g) => "graph {\n".to_string(),
+        };
+
+        match self {
+            CausalGraph::Dag(g) => {
+                for node_index in g.node_indices() {
+                    let node = g.node_weight(node_index).unwrap();
+                    result.push_str(&node.to_string());
+                    result.push('\n');
+                }
+
+                for edge_index in g.edge_indices() {
+                    let edge = g.edge_weight(edge_index).unwrap();
+                    let (source, dst) = g.edge_endpoints(edge_index).unwrap();
+                    result.push_str(&format!(
+                        "{} -> {}",
+                        g.node_weight(source).unwrap().id,
+                        g.node_weight(dst).unwrap().id
+                    ));
+                    result.push_str(&edge.to_string());
+                    result.push('\n');
+                }
+            }
+            CausalGraph::Ungraph(g) => {
+                for node_index in g.node_indices() {
+                    let node = g.node_weight(node_index).unwrap();
+                    result.push_str(&node.to_string());
+                    result.push('\n');
+                }
+
+                for edge_index in g.edge_indices() {
+                    let edge = g.edge_weight(edge_index).unwrap();
+                    let (source, dst) = g.edge_endpoints(edge_index).unwrap();
+                    result.push_str(&format!(
+                        "{} -- {}",
+                        g.node_weight(source).unwrap().id,
+                        g.node_weight(dst).unwrap().id
+                    ));
+                    result.push_str(&edge.to_string());
+                    result.push('\n');
+                }
+            }
+        };
+
+        result.push_str("}");
+        result
     }
 }
