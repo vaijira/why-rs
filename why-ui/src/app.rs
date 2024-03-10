@@ -7,7 +7,8 @@ use why_parser::dagitty::DagittyParser;
 
 use crate::bounds::{Bounds, ContainerCoordinates};
 use crate::css::{
-    LEFT_LEGEND_DIV_CLASS, MAIN_CLASS, MENU_DIV_CLASS, RIGHT_LEGEND_DIV_CLASS, SVG_DIV_CLASS,
+    BODY_CLASS, LEFT_LEGEND_DIV_CLASS, MAIN_CLASS, MENU_DIV_CLASS, RIGHT_LEGEND_DIV_CLASS,
+    SVG_DIV_CLASS,
 };
 use crate::model_data_section::ModelDataSection;
 use crate::svggraph::{SvgGraph, DEFAULT_GRAPH};
@@ -98,6 +99,7 @@ impl App {
 
     pub fn render(this: &Arc<Self>) -> Dom {
         html!("body", {
+            .class(&*BODY_CLASS)
             .children(&mut [
                 Self::main_tag(&this.clone()),
                 Self::aside_tag(this),

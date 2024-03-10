@@ -19,6 +19,7 @@ mod svgvertex;
 mod variable_section;
 
 use app::App;
+use css::set_default_stylesheets;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(start)]
@@ -30,6 +31,8 @@ pub fn main_js() -> Result<(), JsValue> {
     wasm_logger::init(
         wasm_logger::Config::new(log::Level::Debug), //.module_prefix(env!("CARGO_PKG_NAME")),
     );
+
+    set_default_stylesheets();
 
     let app = App::new();
 

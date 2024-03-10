@@ -1,4 +1,4 @@
-use dominator::class;
+use dominator::{class, stylesheet};
 use once_cell::sync::Lazy;
 
 pub(crate) static MAIN_CLASS: Lazy<String> = Lazy::new(|| {
@@ -91,3 +91,23 @@ pub(crate) static BUTTON_CLASS: Lazy<String> = Lazy::new(|| {
         .style("background-color", "white")
     }
 });
+
+pub(crate) static BODY_CLASS: Lazy<String> = Lazy::new(|| {
+    class! {
+        .style("height", "100%")
+        .style("padding", "0")
+        .style("font-family", "sans-serif")
+        .style("font-size", "medium")
+        .style("overscroll-behavior", "contain")
+    }
+});
+
+pub(crate) fn set_default_stylesheets() {
+    stylesheet!(":root", {
+        .style("height", "100%")
+    });
+
+    stylesheet!("article aside details figcaption figure footer header hgroup menu nav section", {
+        .style("display", "block")
+    });
+}
