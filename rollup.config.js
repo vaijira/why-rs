@@ -14,14 +14,16 @@ export default {
     },
     output: {
         dir: "why-ui/dist/js",
-        format: "iife",
+        format: "es",
         sourcemap: true,
     },
     plugins: [
         nodeResolve(),
 
         rust({
-            serverPath: "js/",
+            extraArgs: {
+              wasmOpt: [ "-Oz", "--enable-bulk-memory-opt", "--enable-nontrapping-float-to-int" ],
+            },
         }),
 
 
