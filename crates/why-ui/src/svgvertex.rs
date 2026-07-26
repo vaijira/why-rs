@@ -14,6 +14,9 @@ pub struct SvgVertex {
     pub(crate) id: NodeIndex,
     marked: Mutable<bool>,
     dragging: Mutable<bool>,
+    /// Distance, in svg coordinates, between the pointer and the vertex center
+    /// when the drag started, so the vertex does not jump under the cursor.
+    drag_offset: Mutable<Point<f64>>,
 }
 
 const CSS_VERTEX_TYPE_NONE_FILL_COLOR: &str = "#aaaaaa";
@@ -36,6 +39,7 @@ impl SvgVertex {
             id,
             marked: Mutable::new(false),
             dragging: Mutable::new(false),
+            drag_offset: Mutable::new(Point::new(0.0, 0.0)),
         })
     }
 
@@ -109,6 +113,9 @@ impl SvgVertex {
                     } else {
                         svg_graph.current_variable.set(None);
                     }
+                    let ptr = svg_graph.to_container_coordinates(e.page_x(), e.page_y());
+                    let center = svg_graph.bounds.lock_ref().to_svg_coordinates(&info.layout_pos.lock_ref());
+                    this.drag_offset.set(Point::new(ptr.x() - center.x(), ptr.y() - center.y()));
                     this.dragging.set_neq(true);
                     if graph_element.set_pointer_capture(e.pointer_id()).is_err() {
                         log::error!("Unable to capture pointer id for vertex");
@@ -125,12 +132,13 @@ impl SvgVertex {
                     log::trace!("Vertex PointerMove event x:{} y:{}", e.x() , e.y());
                     log::trace!("Vertex PointerMove event page_x:{} page_y:{}", e.page_x() , e.page_y());
 
-                    let ptr_x = e.page_x() - svg_graph.container.lock_ref().as_ref().map(|container| container.left()).unwrap_or(0);
-                    let ptr_y = e.page_y() - svg_graph.container.lock_ref().as_ref().map(|container| container.top()).unwrap_or(0);
+                    let ptr = svg_graph.to_container_coordinates(e.page_x(), e.page_y());
+                    let offset = this.drag_offset.get();
+                    let pos = Point::new(ptr.x() - offset.x(), ptr.y() - offset.y());
 
-                    log::trace!("Vertex PointerMove event ptr_x:{} ptr_y:{}", ptr_x , ptr_y);
+                    log::trace!("Vertex PointerMove event ptr_x:{} ptr_y:{}", pos.x() , pos.y());
 
-                    *info.layout_pos.lock_mut() = svg_graph.bounds.lock_ref().to_graph_coordinates(&Point::new(ptr_x as f64, ptr_y as f64));
+                    *info.layout_pos.lock_mut() = svg_graph.bounds.lock_ref().to_graph_coordinates(&pos);
 
                     log::trace!("Vertex PointerMove after graph_coordinates x:{} y:{}", info.layout_pos.lock_ref().x() , info.layout_pos.lock_ref().y());
                 }

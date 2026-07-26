@@ -57,10 +57,34 @@ impl App {
         )
     }
 
+    /// Stores where the SVG container starts in page coordinates, so pointer
+    /// events (which are reported in page coordinates) can be translated into
+    /// coordinates relative to the container.
+    fn update_container_coordinates(this: &Arc<Self>, element: &HtmlElement) {
+        let rect = element.get_bounding_client_rect();
+        let (scroll_x, scroll_y) = web_sys::window()
+            .map(|w| {
+                (
+                    w.scroll_x().unwrap_or(0.0),
+                    w.scroll_y().unwrap_or(0.0),
+                )
+            })
+            .unwrap_or((0.0, 0.0));
+
+        // `client_left`/`client_top` are the border widths, the SVG is laid out
+        // inside the padding box.
+        let left = (rect.left() + scroll_x).round() as i32 + element.client_left();
+        let top = (rect.top() + scroll_y).round() as i32 + element.client_top();
+
+        log::debug!("Container coordinates left:{} top:{}", left, top);
+        *this.svg_graph.container.lock_mut() = Some(ContainerCoordinates::new(top, left));
+    }
+
     fn resize(this: &Arc<Self>, element: &HtmlElement) {
         let h = element.offset_height() - 4;
         let w = element.offset_width() - 4;
         log::debug!("Resizing new height:{} width:{}", h, w);
+        Self::update_container_coordinates(this, element);
         *this.svg_graph.bounds.lock_mut() =
             Bounds::calculate_bounds(&this.svg_graph.graph.lock_ref(), h, w);
     }
@@ -82,7 +106,6 @@ impl App {
                     ))
                     .with_node!(element => {
                         .after_inserted(clone!(this  => move |_| {
-                            *this.svg_graph.container.lock_mut() = Some(ContainerCoordinates::new(element.client_top(), element.client_left()));
                             Self::resize(&this, &element)
                         }))
                     })

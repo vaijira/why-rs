@@ -8,6 +8,7 @@ use futures_signals::{
 };
 use why_data::graph::dagitty::{EdgeInfo, NodeInfo};
 use why_data::graph::CausalGraph;
+use why_data::types::Point;
 
 use crate::bounds::ContainerCoordinates;
 use crate::{
@@ -68,6 +69,15 @@ impl SvgGraph {
             model_data: Mutable::new(DEFAULT_GRAPH.into()),
             current_variable: Mutable::new(None),
         })
+    }
+
+    /// Translates the page coordinates reported by a pointer event into
+    /// coordinates relative to the svg container.
+    pub(crate) fn to_container_coordinates(&self, page_x: i32, page_y: i32) -> Point<f64> {
+        let container = self.container.get();
+        let left = container.map(|c| c.left()).unwrap_or(0);
+        let top = container.map(|c| c.top()).unwrap_or(0);
+        Point::new((page_x - left) as f64, (page_y - top) as f64)
     }
 
     pub fn render(this: &Arc<Self>) -> Dom {

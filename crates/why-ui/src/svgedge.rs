@@ -314,10 +314,9 @@ impl SvgEdge {
                     };
                     log::debug!("Edge PointerMove event x:{} y:{}", e.x() , e.y());
                     log::debug!("Edge PointerMove event page_x:{} page_y:{}", e.page_x() , e.page_y());
-                    let ptr_x = e.page_x() - svg_graph.container.lock_ref().as_ref().map(|container| container.left()).unwrap_or(0);
-                    let ptr_y = e.page_y() - svg_graph.container.lock_ref().as_ref().map(|container| container.top()).unwrap_or(0);
-                    log::debug!("Edge PointerMove event ptr_x:{} ptr_y:{}", ptr_x , ptr_y);
-                    *info.layout_pos.lock_mut() = Some(svg_graph.bounds.lock_ref().to_graph_coordinates(&Point::new(ptr_x as f64, ptr_y as f64)));
+                    let ptr = svg_graph.to_container_coordinates(e.page_x(), e.page_y());
+                    log::debug!("Edge PointerMove event ptr_x:{} ptr_y:{}", ptr.x() , ptr.y());
+                    *info.layout_pos.lock_mut() = Some(svg_graph.bounds.lock_ref().to_graph_coordinates(&ptr));
                     log::debug!("Edge PointerMove after graph_coordinates x:{} y:{}",
                                 info.layout_pos.lock_ref().unwrap().x() ,
                                 info.layout_pos.lock_ref().unwrap().y());
