@@ -218,7 +218,7 @@ impl SvgEdge {
 
         let (anchor_back, anchor_front) =
             SvgEdge::svg_edge_anchors(this, svg_graph, &point_v1, &point_v2);
-        let line_path = if let Some(p) = layout_pos {
+        if let Some(p) = layout_pos {
             let p = svg_graph.bounds.lock_ref().to_svg_coordinates(&p);
             format!(
                 "M{:.2},{:.2}Q{:.2},{:.2},{:.2},{:.2}",
@@ -237,9 +237,7 @@ impl SvgEdge {
                 anchor_front.x(),
                 anchor_front.y()
             )
-        };
-
-        line_path
+        }
     }
 
     pub fn render(this: &Arc<SvgEdge>, svg_graph: &Arc<SvgGraph>) -> Dom {

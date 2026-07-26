@@ -308,20 +308,18 @@ impl<N, E> CausalGraphBuilder<N, E> {
     }
 
     fn add_node(mut self, n: N, id: &str) -> CausalGraphBuilder<N, E> {
-        if self.graph.is_some() {
-            let g = self.graph.as_mut().unwrap();
+        if let Some(g) = self.graph.as_mut() {
             self.node_map.insert(id.into(), g.add_node(n));
         }
         self
     }
 
     fn add_edge(mut self, left_node: &str, right_node: &str, edge: E) -> CausalGraphBuilder<N, E> {
-        let left_id = self.node_map.get(left_node);
-        let right_id = self.node_map.get(right_node);
+        let left_id = self.node_map.get(left_node).copied();
+        let right_id = self.node_map.get(right_node).copied();
 
-        if self.graph.is_some() && left_id.is_some() && right_id.is_some() {
-            let g = self.graph.as_mut().unwrap();
-            g.add_edge(*left_id.unwrap(), *right_id.unwrap(), edge);
+        if let (Some(g), Some(left_id), Some(right_id)) = (self.graph.as_mut(), left_id, right_id) {
+            g.add_edge(left_id, right_id, edge);
         }
 
         self
@@ -370,7 +368,7 @@ E -> D
             strict = true;
             pair = dagitty_g.next().unwrap();
         }
-        assert_eq!(false, strict);
+        assert!(!strict);
         assert_eq!(Rule::GRAPHTYPE, pair.as_rule());
         assert_eq!("dag", pair.as_str());
         if let Rule::IDENTIFIER = pair.as_rule() {

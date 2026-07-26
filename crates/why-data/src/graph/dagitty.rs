@@ -1,5 +1,6 @@
 use crate::types::Point;
 use futures_signals::signal::Mutable;
+use std::fmt::Display;
 use std::sync::Arc;
 
 use super::CausalGraph;
@@ -21,8 +22,8 @@ pub enum VertexType {
     Unobserved,
 }
 
-impl ToString for VertexType {
-    fn to_string(&self) -> String {
+impl Display for VertexType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let result = match &self {
             VertexType::None => "",
             VertexType::Adjusted => "adjusted",
@@ -32,7 +33,7 @@ impl ToString for VertexType {
             VertexType::Unobserved => "unobserved",
         };
 
-        result.to_string()
+        f.write_str(result)
     }
 }
 
@@ -77,20 +78,17 @@ impl NodeInfo {
     }
 }
 
-impl ToString for NodeInfo {
-    fn to_string(&self) -> String {
+impl Display for NodeInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if *self.vertex_type.lock_ref() == VertexType::None {
-            format!(
-                r#"{} [pos="{}"]"#,
-                self.id,
-                self.layout_pos.lock_ref().to_string()
-            )
+            write!(f, r#"{} [pos="{}"]"#, self.id, self.layout_pos.get())
         } else {
-            format!(
+            write!(
+                f,
                 r#"{} [{},pos="{}"]"#,
                 self.id,
-                self.vertex_type.lock_ref().to_string(),
-                self.layout_pos.lock_ref().to_string()
+                self.vertex_type.get(),
+                self.layout_pos.get()
             )
         }
     }
@@ -118,18 +116,17 @@ impl EdgeInfo {
     }
 }
 
-impl ToString for EdgeInfo {
-    fn to_string(&self) -> String {
-        if self.layout_pos.lock_ref().is_some() {
-            format!(" [pos={}]", self.layout_pos.lock_ref().unwrap().to_string())
-        } else {
-            "".to_string()
+impl Display for EdgeInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self.layout_pos.lock_ref() {
+            Some(pos) => write!(f, " [pos={}]", pos),
+            None => Ok(()),
         }
     }
 }
 
-impl ToString for CausalGraph<Arc<NodeInfo>, Arc<EdgeInfo>> {
-    fn to_string(&self) -> String {
+impl Display for CausalGraph<Arc<NodeInfo>, Arc<EdgeInfo>> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut result = match self {
             CausalGraph::Dag(_dag) => "dag {\n".to_string(),
             CausalGraph::Ungraph(_g) => "graph {\n".to_string(),
@@ -176,7 +173,7 @@ impl ToString for CausalGraph<Arc<NodeInfo>, Arc<EdgeInfo>> {
             }
         };
 
-        result.push_str("}");
-        result
+        result.push('}');
+        f.write_str(&result)
     }
 }

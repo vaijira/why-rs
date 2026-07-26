@@ -163,11 +163,11 @@ mod tests {
         g.add_edge(b, z, "");
         g.add_edge(e, d, "");
 
-        let mut iter = g.ancestors(a).into_iter();
+        let mut iter = g.ancestors(a);
 
         assert_eq!(None, iter.next());
 
-        let iter = g.ancestors(z).into_iter();
+        let iter = g.ancestors(z);
         let nodes = iter.collect::<HashSet<NodeIndex>>();
         assert_eq!(HashSet::from([a, b]), nodes);
     }

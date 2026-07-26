@@ -24,8 +24,8 @@ impl<T: Copy> Point<T> {
     }
 }
 
-impl<T: Copy + Display> ToString for Point<T> {
-    fn to_string(&self) -> String {
-        format!("{},{}", self.x, self.y)
+impl<T: Copy + Display> Display for Point<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{},{}", self.x, self.y)
     }
 }
