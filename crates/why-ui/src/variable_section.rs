@@ -48,14 +48,14 @@ impl VariableSection {
         node_info: &Option<Arc<NodeInfo>>,
         vertex_type: VertexType,
     ) {
-        if let Some(ref node) = node_info {
+        if let Some(node) = node_info {
             *node.vertex_type.lock_mut() = vertex_type;
             *svg_graph.current_variable.lock_mut() = Some(node.clone());
         }
     }
 
     fn remove_vertex(svg_graph: &Arc<SvgGraph>, node_info: &Option<Arc<NodeInfo>>) {
-        if let Some(ref node) = node_info {
+        if let Some(node) = node_info {
             let node_index = {
                 match &*svg_graph.graph.lock_ref() {
                     CausalGraph::Dag(g) => g.node_indices().find(|i| g[*i].id == node.id).unwrap(),
