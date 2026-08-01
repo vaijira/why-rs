@@ -1,0 +1,57 @@
+[package]
+name = "the-effect-examples"
+description = "The effect book examples"
+version = "0.1.0"
+authors = ["Jorge Perez Burgos <vaijira@gmail.com>"]
+edition = "2024"
+
+[workspace]
+
+# Each chapter lives in its own subdirectory alongside the Python original, so
+# the examples need explicit paths: cargo only auto-discovers `examples/*.rs`
+# and `examples/<dir>/main.rs`.
+[[example]]
+name = "describing_relationships"
+path = "examples/chapter4_describing_relationships/describing_relationships.rs"
+
+[[example]]
+name = "ols_lu"
+path = "examples/chapter4_describing_relationships/ols_lu.rs"
+
+[dependencies]
+burn = { git = "https://github.com/tracel-ai/burn", rev = "13340b9965c4d576f3d5ed5a5fd028b0d3d66ea9", features = [
+    "train",
+    "ndarray",
+    "wgpu",
+] }
+# `burn::data::dataset::DataframeDataset` -- reads a polars `DataFrame`
+# directly, which is what `causaldata` returns. The umbrella crate has no
+# feature of its own for it, so the flag is set on `burn-dataset` itself; cargo
+# unifies it with the copy `burn` already pulls in.
+burn-dataset = { git = "https://github.com/tracel-ai/burn", rev = "13340b9965c4d576f3d5ed5a5fd028b0d3d66ea9", default-features = false, features = [
+    "dataframe",
+] }
+
+# Only for the eager frame API the two examples use -- `causaldata` does the
+# reading, so no `csv`, and nothing here builds a query plan, so no `lazy`.
+# Note that this list does not decide what gets compiled: cargo unifies it with
+# what `causaldata` and `burn-dataset` ask for, and those already pull in csv,
+# lazy and the extra dtypes.
+polars = { version = "0.54", default-features = false }
+# `DataframeDataset` reads a row through `Deserialize`, so the record type is a
+# derive away.
+serde = { version = "1.0", features = ["std", "derive"] }
+
+# The Rust sibling of the `causaldata` package the Python script imports from;
+# `mroz::load()` is the analogue of `Mroz.load_pandas().data`.
+causaldata = { path = "../../../causaldata/Rust/causaldata", default-features = false }
+# OLS with the statsmodels summary statistics: t, p, F, AIC/BIC, and the
+# residual diagnostics. Stands in for `statsmodels.formula.api`.
+inferust = "0.2"
+# Stands in for seaborn; the SVG backend needs no system font access.
+plotters = { version = "0.3", default-features = false, features = [
+    "svg_backend",
+    "line_series",
+    "point_series",
+    "all_elements",
+] }
