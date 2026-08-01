@@ -21,5 +21,8 @@ yarn.lock
 # Ignore generated wasm and js
 **/dist/js/
 
+# Ignore the SVGs the examples draw; every run rewrites them
+**/plots/
+
 # Ignore vscode
 .vscode
