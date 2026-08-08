@@ -1,11 +1,17 @@
 /// Common data structures for dagitty interaction.
 pub mod dagitty;
+// These four are documented by their own `//!` headers, which is where the
+// intra-doc links resolve from; an outer `///` here would shadow them.
+pub mod backdoor;
+pub mod docalculus;
+pub mod dseparation;
+pub mod identification;
 
 use std::collections::HashSet;
 use std::fmt::Debug;
 
-use petgraph::visit::EdgeRef;
 pub use petgraph::{
+    visit::EdgeRef,
     graph::{DiGraph, Edges, UnGraph},
     graph::{EdgeIndex, NodeIndex},
     graph::{IndexType, WalkNeighbors},

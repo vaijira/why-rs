@@ -7,10 +7,46 @@ edition = "2024"
 [dependencies]
 futures-signals = "0.3"
 petgraph = "0.8"
+# Two separate reasons this floor cannot drop:
+#   0.2.12 takes `faer` with `default-features = false`, dropping the `rayon`
+#          feature and with it `spindle` -> `atomic-wait`, which has no wasm
+#          backend. Before that, wasm32-unknown-unknown would not build.
+#   0.2.13 makes its build script emit the VERGEN_GIT_* placeholders that
+#          `src/constant.rs` reads with `env!()`. 0.2.12 emitted nothing when
+#          git was unavailable, so it failed to compile from crates.io on every
+#          target and needed those variables supplied externally.
+# Do not relax this to "0.2": an older patch would resolve and break the build.
+rssn = { version = "0.2.13", default-features = false }
+
+# Ports of the Causal AI book's chapter 2 notebooks.
+[[example]]
+name = "chapter2_part1"
+
+[[example]]
+name = "chapter2_part2"
+
+[[example]]
+name = "chapter4_part1"
+
+[[example]]
+name = "chapter4_part2"
+
+# WASM-only opt-ins. `rssn` reaches three generations of `rand`, and each
+# `getrandom` behind them refuses to build for wasm32-unknown-unknown until a
+# source of randomness is named; `uuid` does the same. Cargo features are
+# additive, so selecting them here is enough — the crates are otherwise unused,
+# and the whole block is inert off wasm. No RUSTFLAGS needed: getrandom
+# 0.3.4/0.4.3 choose the browser backend on the feature alone (0.3.4's error
+# text claiming otherwise is stale). Older 0.3.x also wanted
+# `--cfg getrandom_backend="wasm_js"`, so keep these at recent patch releases.
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
+getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
+getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
+getrandom_04 = { package = "getrandom", version = "0.4", features = ["wasm_js"] }
+uuid = { version = "1", features = ["js"] }
 
 [dependencies.web-sys]
 version = "0.3"
 features = [
     "SvgPathElement",
 ]
-

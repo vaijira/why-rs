@@ -11,8 +11,8 @@ only, no `[package]`. Every crate lives under [crates/](crates/).
 
 | Crate | Role |
 | --- | --- |
-| [crates/why-data/](crates/why-data/) | Graph/DAG data structures and algorithms |
-| [crates/why-parser/](crates/why-parser/) | Parsers for causal model formats |
+| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-calculus, ID, symbolic SCMs |
+| [crates/why-parser/](crates/why-parser/) | Parsers: dagitty (pest) and the book's `<NODES>/<EDGES>/<TASK>` format |
 | [crates/why-ui/](crates/why-ui/) | `cdylib`+`rlib` WASM front end built with `dominator` |
 
 The browser entry point is [crates/why-ui/src/lib.rs](crates/why-ui/src/lib.rs);
@@ -77,17 +77,57 @@ cargo build
 cargo test
 cargo clippy --all-targets
 cargo test -p why-data     # single crate
+
+# Ports of the Causal AI book's chapter 2 notebooks. Both assert every value
+# against the number the Python original produces, so they fail loudly on a
+# regression in `scm`; treat them as tests you can read.
+cargo run -p why-data --example chapter2_part1   # SCM, d-separation
+cargo run -p why-data --example chapter2_part2
+cargo run -p why-data --example chapter4_part1   # back-door criterion
+cargo run -p why-data --example chapter4_part2   # do-calculus + ID
+cargo run -p why-parser --example notebook_graphs  # the book's file format
 ```
 
 The root is a virtual manifest, so these cover all members by default — no
-`--workspace` needed. As of the last verified run the workspace has 6 tests
-(1 in `why-data`, 5 in `why-parser`), all passing; clippy reports pre-existing
-warnings in `why-data` (6) and `why-parser` (4) and no errors.
+`--workspace` needed. As of the last verified run the workspace has 86 tests
+(64 in `why-data` plus 5 doctests, 16 in `why-parser` plus 1 doctest), all
+passing, and clippy is clean workspace-wide (the warnings this file used to
+record were fixed in f9aee15).
 
-Building `why-ui` for the browser needs the `wasm32-unknown-unknown` target
-(`rustup target add wasm32-unknown-unknown`). `wasm-bindgen` and `wasm-opt` come
-from the `@wasm-tool/rollup-plugin-rust` and `binaryen` npm dev dependencies —
-do not install them separately.
+`why-data` has no Cargo features, and no `RUSTFLAGS` or `.cargo/config.toml` are
+involved. The `scm` module was gated behind a feature until `rssn` 0.2.12 made
+it buildable for WASM; the gate is gone and
+[crates/why-data/src/scm.rs](crates/why-data/src/scm.rs) is always compiled.
+
+### `rssn` and WASM
+
+[crates/why-data/src/scm.rs](crates/why-data/src/scm.rs) depends on
+[`rssn`](https://crates.io/crates/rssn) for symbolic expressions. It is an
+unconditional dependency, so **`rssn` is in the browser bundle** — `why-ui`
+depends on `why-data`.
+
+It builds for `wasm32-unknown-unknown`, verified:
+
+```sh
+cargo build -p why-data --target wasm32-unknown-unknown
+cargo build -p why-ui-rs --target wasm32-unknown-unknown
+```
+
+Three things make that work, and the third is why the `rssn` requirement is
+pinned to an exact patch release rather than `0.2`:
+
+1. **`getrandom`**, which `rssn` pulls in three generations of (`rand`
+   0.8/0.9/0.10 → getrandom 0.2/0.3/0.4). All three are declared as
+   target-gated dependencies of `why-data` with `js` (0.2) and
+   `wasm_js` (0.3, 0.4). Features are enough: 0.3.4 and 0.4.3 pick the browser
+   backend on `#[cfg(feature = "wasm_js")]` alone, despite 0.3.4's error text
+   still insisting the feature is "insufficient" — that message is stale, and
+   older 0.3.x really did also want `--cfg getrandom_backend="wasm_js"`.
+2. **`uuid`** with its `js` feature, likewise.
+3. **`rssn` 0.2.13 or newer.** Up to 0.2.11 it declared a bare
+   `faer = "0.24"`, whose default features include `rayon` → `spindle` →
+   `atomic-wait`, and `atomic-wait` 1.1 (latest, Jan 2023) has no wasm
+   `platform` module, so the build died with `cannot find module platform`.
 
 ## Conventions
 
