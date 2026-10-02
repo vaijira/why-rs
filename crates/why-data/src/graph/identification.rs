@@ -29,15 +29,23 @@ use std::fmt;
 
 use super::dseparation::{Admg, DSepError};
 
-/// An estimand: an expression in observational quantities.
+/// An estimand: an expression in the available distributions.
+///
+/// [`identify`] only ever produces observational terms; the C-INFER engine in
+/// [`super::cinfer`] may also draw on experimental distributions
+/// `P(v | do(z))`, which is what [`Formula::P::doing`] records.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Formula {
-    /// `P(vars | given)`, a conditional of the observational distribution.
+    /// `P(vars | given, do(doing))`, a conditional of the observational
+    /// distribution when `doing` is empty, or of the experimental one in which
+    /// `doing` was intervened on.
     P {
         /// The variables whose probability this is.
         vars: Vec<String>,
         /// What it is conditioned on; empty for a plain marginal.
         given: Vec<String>,
+        /// The intervention defining the regime; empty for observational data.
+        doing: Vec<String>,
     },
     /// A product of factors.
     Product(Vec<Formula>),
@@ -60,7 +68,7 @@ pub enum Formula {
 
 impl Formula {
     /// A product, flattened and reduced to its single factor when it has one.
-    fn product(mut factors: Vec<Self>) -> Self {
+    pub(crate) fn product(mut factors: Vec<Self>) -> Self {
         let mut flat = Vec::new();
         for f in factors.drain(..) {
             match f {
@@ -80,7 +88,7 @@ impl Formula {
     ///
     /// Nested sums are merged first: `sum_a sum_b` is `sum_{a,b}`, and flattening
     /// them lets the cancellation below see the whole product at once.
-    fn sum(over: Vec<String>, body: Self) -> Self {
+    pub(crate) fn sum(over: Vec<String>, body: Self) -> Self {
         let (over, body) = match body {
             Self::Sum {
                 over: inner,
@@ -158,7 +166,7 @@ impl Formula {
                     return collapsed;
                 };
                 // sum_a P(a, b | c) = P(b | c)
-                if let Self::P { vars, given } = &**body
+                if let Self::P { vars, given, doing } = &**body
                     && over
                         .iter()
                         .all(|v| vars.contains(v) && !given.contains(v))
@@ -169,6 +177,7 @@ impl Formula {
                         return Self::P {
                             vars: kept,
                             given: given.clone(),
+                            doing: doing.clone(),
                         };
                     }
                 }
@@ -177,9 +186,20 @@ impl Formula {
             Self::Ratio { num, den } => {
                 let (num, den) = (num.simplify(), den.simplify());
                 // P(a, b | c) / P(b | c) = P(a | b, c)
-                if let (Self::P { vars: a, given: gn }, Self::P { vars: b, given: gd }) =
-                    (&num, &den)
+                if let (
+                    Self::P {
+                        vars: a,
+                        given: gn,
+                        doing: dn,
+                    },
+                    Self::P {
+                        vars: b,
+                        given: gd,
+                        doing: dd,
+                    },
+                ) = (&num, &den)
                     && gn == gd
+                    && dn == dd
                     && b.iter().all(|v| a.contains(v))
                 {
                     let kept: Vec<String> =
@@ -187,7 +207,11 @@ impl Formula {
                     if !kept.is_empty() {
                         let mut given = gn.clone();
                         given.extend(b.iter().cloned());
-                        return Self::P { vars: kept, given };
+                        return Self::P {
+                            vars: kept,
+                            given,
+                            doing: dn.clone(),
+                        };
                     }
                 }
                 Self::Ratio {
@@ -201,13 +225,42 @@ impl Formula {
     /// Whether `v` occurs anywhere in this formula.
     fn mentions(&self, v: &str) -> bool {
         match self {
-            Self::P { vars, given } => {
-                vars.iter().any(|s| s == v) || given.iter().any(|s| s == v)
+            Self::P { vars, given, doing } => {
+                vars.iter().chain(given).chain(doing).any(|s| s == v)
             }
             Self::Product(fs) => fs.iter().any(|f| f.mentions(v)),
             Self::Sum { over, body } => over.iter().any(|s| s == v) || body.mentions(v),
             Self::Ratio { num, den } => num.mentions(v) || den.mentions(v),
         }
+    }
+
+    /// The variables no enclosing sum binds.
+    pub(crate) fn free_vars(&self) -> BTreeSet<String> {
+        fn walk(f: &Formula, bound: &mut Vec<String>, out: &mut BTreeSet<String>) {
+            match f {
+                Formula::P { vars, given, doing } => out.extend(
+                    vars.iter()
+                        .chain(given)
+                        .chain(doing)
+                        .filter(|v| !bound.contains(v))
+                        .cloned(),
+                ),
+                Formula::Product(fs) => fs.iter().for_each(|f| walk(f, bound, out)),
+                Formula::Ratio { num, den } => {
+                    walk(num, bound, out);
+                    walk(den, bound, out);
+                }
+                Formula::Sum { over, body } => {
+                    let depth = bound.len();
+                    bound.extend(over.iter().cloned());
+                    walk(body, bound, out);
+                    bound.truncate(depth);
+                }
+            }
+        }
+        let mut out = BTreeSet::new();
+        walk(self, &mut Vec::new(), &mut out);
+        out
     }
 
     /// Renames every occurrence of `from` to `to`.
@@ -218,9 +271,10 @@ impl Formula {
             }
         };
         match self {
-            Self::P { vars, given } => {
+            Self::P { vars, given, doing } => {
                 vars.iter_mut().for_each(swap);
                 given.iter_mut().for_each(swap);
+                doing.iter_mut().for_each(swap);
             }
             Self::Product(fs) => fs.iter_mut().for_each(|f| f.rename(from, to)),
             Self::Sum { over, body } => {
@@ -238,7 +292,9 @@ impl Formula {
     ///
     /// The front-door estimand sums over `x` while `x` is also the treatment
     /// being asked about; textbooks write the bound one `x'`, and so does this.
-    fn avoid_capture(&mut self, free: &BTreeSet<String>) {
+    /// An index bound by an enclosing sum counts as free inside it, so a nested
+    /// sum never reuses its parent's name either.
+    pub(crate) fn avoid_capture(&mut self, free: &BTreeSet<String>) {
         match self {
             Self::P { .. } => {}
             Self::Product(fs) => fs.iter_mut().for_each(|f| f.avoid_capture(free)),
@@ -250,7 +306,10 @@ impl Formula {
                 let collisions: Vec<String> =
                     over.iter().filter(|v| free.contains(*v)).cloned().collect();
                 for v in collisions {
-                    let primed = format!("{v}'");
+                    let mut primed = format!("{v}'");
+                    while free.contains(&primed) || over.contains(&primed) {
+                        primed.push('\'');
+                    }
                     for slot in over.iter_mut() {
                         if *slot == v {
                             *slot = primed.clone();
@@ -258,7 +317,9 @@ impl Formula {
                     }
                     body.rename(&v, &primed);
                 }
-                body.avoid_capture(free);
+                let mut inner = free.clone();
+                inner.extend(over.iter().cloned());
+                body.avoid_capture(&inner);
             }
         }
     }
@@ -271,12 +332,20 @@ impl Formula {
                 .join(", ")
         };
         match self {
-            Self::P { vars, given } => {
+            Self::P { vars, given, doing } => {
                 let bar = if latex { " \\mid " } else { " | " };
-                if given.is_empty() {
+                let mut cond = lower(given);
+                if !doing.is_empty() {
+                    if !cond.is_empty() {
+                        cond.push_str(", ");
+                    }
+                    let op = if latex { "\\mathrm{do}" } else { "do" };
+                    cond.push_str(&format!("{op}({})", lower(doing)));
+                }
+                if cond.is_empty() {
                     write!(f, "P({})", lower(vars))
                 } else {
-                    write!(f, "P({}{bar}{})", lower(vars), lower(given))
+                    write!(f, "P({}{bar}{cond})", lower(vars))
                 }
             }
             Self::Product(factors) => {
@@ -284,7 +353,16 @@ impl Formula {
                     if i > 0 {
                         f.write_str(" ")?;
                     }
-                    factor.write(f, latex)?;
+                    // A sum's body runs to the end of the product, so one that
+                    // is followed by further factors must be bracketed or it
+                    // would appear to bind them too.
+                    if matches!(factor, Self::Sum { .. }) && i + 1 < factors.len() {
+                        f.write_str("[")?;
+                        factor.write(f, latex)?;
+                        f.write_str("]")?;
+                    } else {
+                        factor.write(f, latex)?;
+                    }
                 }
                 Ok(())
             }
@@ -351,14 +429,16 @@ impl fmt::Display for Formula {
 /// the ID recursion emits factors in.
 fn collapse_runs(factors: Vec<Formula>) -> Vec<Formula> {
     let head = |f: &Formula| match f {
-        Formula::P { vars, given } if vars.len() == 1 => Some((vars[0].clone(), given.clone())),
+        Formula::P { vars, given, doing } if vars.len() == 1 => {
+            Some((vars[0].clone(), given.clone(), doing.clone()))
+        }
         _ => None,
     };
 
     let mut out = Vec::new();
     let mut i = 0;
     while i < factors.len() {
-        let Some((var, given)) = head(&factors[i]) else {
+        let Some((var, given, doing)) = head(&factors[i]) else {
             out.push(factors[i].clone());
             i += 1;
             continue;
@@ -367,9 +447,12 @@ fn collapse_runs(factors: Vec<Formula>) -> Vec<Formula> {
         let mut accumulated = vec![var];
         let mut j = i + 1;
         while j < factors.len() {
-            let Some((next, next_given)) = head(&factors[j]) else {
+            let Some((next, next_given, next_doing)) = head(&factors[j]) else {
                 break;
             };
+            if next_doing != doing {
+                break;
+            }
             let expected: BTreeSet<String> = common
                 .iter()
                 .cloned()
@@ -385,6 +468,7 @@ fn collapse_runs(factors: Vec<Formula>) -> Vec<Formula> {
             out.push(Formula::P {
                 vars: accumulated,
                 given,
+                doing,
             });
             i = j;
         } else {
@@ -452,36 +536,57 @@ impl std::error::Error for IdError {}
 /// and 7 emit `P(v | ...)` instead of a quotient. Once a marginal has to be
 /// taken that cannot be expressed by dropping factors, `terms` becomes `None`
 /// and conditioning falls back to a ratio.
+///
+/// `doing` names the regime every term is read from: empty for observational
+/// data, `Z` for an experiment `P(v | do(z))`.
 #[derive(Clone, Debug)]
-struct Dist {
-    domain: BTreeSet<String>,
+pub(crate) struct Dist {
+    pub(crate) domain: BTreeSet<String>,
     terms: Option<Vec<(String, Vec<String>)>>,
-    formula: Formula,
+    doing: Vec<String>,
+    pub(crate) formula: Formula,
 }
 
 impl Dist {
-    /// The observational distribution over the whole graph, factorised by the
-    /// chain rule along a topological order.
-    fn observational(order: &[String]) -> Self {
+    /// The distribution over `order` in the regime `do(doing)`, factorised by
+    /// the chain rule along `order`, which must be topological.
+    fn chain(order: &[String], doing: &[String]) -> Self {
+        Self::chain_with(order, doing, |i| order[..i].to_vec())
+    }
+
+    /// As [`Dist::chain`], but `P(order[i] | given(i))` in place of conditioning
+    /// on every predecessor — for when the graph licenses a smaller set.
+    pub(crate) fn chain_with(
+        order: &[String],
+        doing: &[String],
+        given: impl Fn(usize) -> Vec<String>,
+    ) -> Self {
         let terms: Vec<(String, Vec<String>)> = order
             .iter()
             .enumerate()
-            .map(|(i, v)| (v.clone(), order[..i].to_vec()))
+            .map(|(i, v)| (v.clone(), given(i)))
             .collect();
         Self {
             domain: order.iter().cloned().collect(),
-            formula: Self::product_of(&terms),
+            formula: Self::product_of(&terms, doing),
             terms: Some(terms),
+            doing: doing.to_vec(),
         }
     }
 
-    fn product_of(terms: &[(String, Vec<String>)]) -> Formula {
+    /// The observational distribution over the whole graph.
+    fn observational(order: &[String]) -> Self {
+        Self::chain(order, &[])
+    }
+
+    fn product_of(terms: &[(String, Vec<String>)], doing: &[String]) -> Formula {
         Formula::product(
             terms
                 .iter()
                 .map(|(v, given)| Formula::P {
                     vars: vec![v.clone()],
                     given: given.clone(),
+                    doing: doing.to_vec(),
                 })
                 .collect(),
         )
@@ -492,7 +597,7 @@ impl Dist {
     /// When the factors are a chain-rule product and `keep` is closed under the
     /// order's predecessors, the marginal is just the surviving factors — the
     /// trailing ones sum to one. Otherwise it has to stay a sum.
-    fn marginal(&self, keep: &BTreeSet<String>) -> Self {
+    pub(crate) fn marginal(&self, keep: &BTreeSet<String>) -> Self {
         if let Some(terms) = &self.terms {
             let closed = terms
                 .iter()
@@ -510,8 +615,9 @@ impl Dist {
                     .collect();
                 return Self {
                     domain: keep.clone(),
-                    formula: Self::product_of(&kept),
+                    formula: Self::product_of(&kept, &self.doing),
                     terms: Some(kept),
+                    doing: self.doing.clone(),
                 };
             }
         }
@@ -519,6 +625,7 @@ impl Dist {
         Self {
             domain: keep.clone(),
             terms: None,
+            doing: self.doing.clone(),
             formula: Formula::sum(over, self.formula.clone()),
         }
     }
@@ -531,6 +638,7 @@ impl Dist {
             return Formula::P {
                 vars: vec![v.clone()],
                 given: g.clone(),
+                doing: self.doing.clone(),
             };
         }
         let given_set: BTreeSet<String> = given.iter().cloned().collect();
@@ -544,7 +652,24 @@ impl Dist {
 
     /// The distribution restricted to `keep`, as a product of the conditionals
     /// of each surviving variable — steps 6 and 7.
+    ///
+    /// This is Tian's c-component factorisation, the δ-operator: for a
+    /// c-component `C` of the current domain `T`,
+    /// `Q[C] = prod_{v in C} Q[T](v | predecessors of v in T)`. `order` must be
+    /// a topological order of exactly the current domain.
     fn restrict(&self, keep: &BTreeSet<String>, order: &[String]) -> Self {
+        self.restrict_with(keep, order, |i| order[..i].to_vec())
+    }
+
+    /// As [`Dist::restrict`], conditioning `order[i]` on `given(i)` — a subset
+    /// of its predecessors the graph shows to be enough — instead of on all of
+    /// them.
+    pub(crate) fn restrict_with(
+        &self,
+        keep: &BTreeSet<String>,
+        order: &[String],
+        given: impl Fn(usize) -> Vec<String>,
+    ) -> Self {
         let mut terms = Vec::new();
         let mut factors = Vec::new();
         let mut plain = true;
@@ -552,9 +677,9 @@ impl Dist {
             if !keep.contains(v) {
                 continue;
             }
-            let given = order[..i].to_vec();
+            let given = given(i);
             let factor = self.conditional(v, &given);
-            if let Formula::P { vars, given } = &factor {
+            if let Formula::P { vars, given, .. } = &factor {
                 terms.push((vars[0].clone(), given.clone()));
             } else {
                 plain = false;
@@ -564,6 +689,7 @@ impl Dist {
         Self {
             domain: keep.clone(),
             terms: plain.then_some(terms),
+            doing: self.doing.clone(),
             formula: Formula::product(factors),
         }
     }

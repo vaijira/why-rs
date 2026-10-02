@@ -11,7 +11,7 @@ only, no `[package]`. Every crate lives under [crates/](crates/).
 
 | Crate | Role |
 | --- | --- |
-| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-calculus, ID, symbolic SCMs |
+| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-calculus, ID, C-INFER, symbolic SCMs |
 | [crates/why-parser/](crates/why-parser/) | Parsers: dagitty (pest) and the book's `<NODES>/<EDGES>/<TASK>` format |
 | [crates/why-ui/](crates/why-ui/) | `cdylib`+`rlib` WASM front end built with `dominator` |
 
@@ -85,12 +85,13 @@ cargo run -p why-data --example chapter2_part1   # SCM, d-separation
 cargo run -p why-data --example chapter2_part2
 cargo run -p why-data --example chapter4_part1   # back-door criterion
 cargo run -p why-data --example chapter4_part2   # do-calculus + ID
+cargo run -p why-data --example chapter4_cinfer  # C-INFER, q-trees and d-trees
 cargo run -p why-parser --example notebook_graphs  # the book's file format
 ```
 
 The root is a virtual manifest, so these cover all members by default — no
-`--workspace` needed. As of the last verified run the workspace has 86 tests
-(64 in `why-data` plus 5 doctests, 16 in `why-parser` plus 1 doctest), all
+`--workspace` needed. As of the last verified run the workspace has 97 tests
+(74 in `why-data` plus 6 doctests, 16 in `why-parser` plus 1 doctest), all
 passing, and clippy is clean workspace-wide (the warnings this file used to
 record were fixed in f9aee15).
 
@@ -98,6 +99,19 @@ record were fixed in f9aee15).
 involved. The `scm` module was gated behind a feature until `rssn` 0.2.12 made
 it buildable for WASM; the gate is gone and
 [crates/why-data/src/scm.rs](crates/why-data/src/scm.rs) is always compiled.
+
+### C-INFER and ID
+
+[crates/why-data/src/graph/cinfer.rs](crates/why-data/src/graph/cinfer.rs)
+(chapter 4.4: q-trees, d-trees, the `Σ`/`δ`/`σ`/`Γ` operators) and
+[crates/why-data/src/graph/identification.rs](crates/why-data/src/graph/identification.rs)
+(Shpitser-Pearl ID/IDC) share `Formula` and the private `Dist` helper. On
+observational input they must identify exactly the same queries: both are
+complete. `cinfer`'s `agrees_with_id_and_is_numerically_sound` test checks
+this over random graphs. It also evaluates every estimand against the true
+effect of a random latent-confounder model, so run it after touching either
+file. Estimand *strings* can differ: C-INFER conditions each factor on its
+district's blanket, and ID conditions on every predecessor.
 
 ### `rssn` and WASM
 

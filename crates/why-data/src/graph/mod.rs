@@ -6,6 +6,8 @@ pub mod backdoor;
 pub mod docalculus;
 pub mod dseparation;
 pub mod identification;
+// Documented by its own `//!` header, like the four above.
+pub mod cinfer;
 
 use std::collections::HashSet;
 use std::fmt::Debug;
