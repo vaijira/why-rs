@@ -11,8 +11,8 @@ only, no `[package]`. Every crate lives under [crates/](crates/).
 
 | Crate | Role |
 | --- | --- |
-| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-calculus, ID, C-INFER, symbolic SCMs |
-| [crates/why-parser/](crates/why-parser/) | Parsers: dagitty (pest) and the book's `<NODES>/<EDGES>/<TASK>` format |
+| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-calculus, σ-calculus, ID, C-INFER, symbolic SCMs |
+| [crates/why-parser/](crates/why-parser/) | Parsers: dagitty (pest) and the book's section format (`<NODES>`, `<EDGES>`, `<TASK>`, `<QUERY>`, `<INTERVENTIONS>`) |
 | [crates/why-ui/](crates/why-ui/) | `cdylib`+`rlib` WASM front end built with `dominator` |
 
 The browser entry point is [crates/why-ui/src/lib.rs](crates/why-ui/src/lib.rs);
@@ -90,8 +90,8 @@ cargo run -p why-parser --example notebook_graphs  # the book's file format
 ```
 
 The root is a virtual manifest, so these cover all members by default — no
-`--workspace` needed. As of the last verified run the workspace has 97 tests
-(74 in `why-data` plus 6 doctests, 16 in `why-parser` plus 1 doctest), all
+`--workspace` needed. As of the last verified run the workspace has 116 tests
+(86 in `why-data` plus 7 doctests, 21 in `why-parser` plus 2 doctests), all
 passing, and clippy is clean workspace-wide (the warnings this file used to
 record were fixed in f9aee15).
 
@@ -112,6 +112,20 @@ this over random graphs. It also evaluates every estimand against the true
 effect of a random latent-confounder model, so run it after touching either
 file. Estimand *strings* can differ: C-INFER conditions each factor on its
 district's blanket, and ID conditions on every predecessor.
+
+### σ-calculus
+
+[crates/why-data/src/graph/sigmacalculus.rs](crates/why-data/src/graph/sigmacalculus.rs)
+ports the book's `SigmaCalculusInspector` (Correa & Bareinboim 2020), reusing
+`docalculus`'s formatting helpers. It deliberately departs from the Python in
+three places, listed in its module docs. The Python has a mutable-default-list
+bug in `TransformNodes` that leaks cuts between queries. So when its answers
+disagree with this module, check the Python first. Its test graphs were
+cross-checked by running the Python inspector, which needs `networkx`,
+`toposort` and `pydash`. There is no σ-calculus notebook, so there is no
+`examples/` port. `why_parser::fusion` reads the book's `<QUERY>` and
+`<INTERVENTIONS>` sections, and `Document::sigma_calculus` runs the rule they
+describe. Watch the naming: `treatment:` is X in `<TASK>` but Z in `<QUERY>`.
 
 ### `rssn` and WASM
 

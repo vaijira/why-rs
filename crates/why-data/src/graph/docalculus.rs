@@ -115,7 +115,7 @@ fn graph_label(parts: &[String]) -> String {
     }
 }
 
-fn lower(vs: &[&str]) -> String {
+pub(super) fn lower(vs: &[&str]) -> String {
     vs.iter()
         .map(|v| v.to_lowercase())
         .collect::<Vec<_>>()
@@ -140,7 +140,7 @@ fn probability(y: &[&str], do_x: &[&str], observed: &[&[&str]]) -> String {
     }
 }
 
-fn independence(y: &[&str], z: &[&str], x: &[&str], w: &[&str]) -> String {
+pub(super) fn independence(y: &[&str], z: &[&str], x: &[&str], w: &[&str]) -> String {
     let mut given: Vec<&str> = x.to_vec();
     given.extend(w.iter().copied());
     if given.is_empty() {
@@ -152,7 +152,7 @@ fn independence(y: &[&str], z: &[&str], x: &[&str], w: &[&str]) -> String {
 
 /// A d-separation test that treats an empty `Y` or `Z` as vacuously separated,
 /// which is what the rules mean when a set is absent.
-fn separated(g: &Admg, y: &[&str], z: &[&str], given: &[&str]) -> Result<bool, DSepError> {
+pub(super) fn separated(g: &Admg, y: &[&str], z: &[&str], given: &[&str]) -> Result<bool, DSepError> {
     if y.is_empty() || z.is_empty() {
         return Ok(true);
     }
