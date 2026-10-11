@@ -90,8 +90,8 @@ cargo run -p why-parser --example notebook_graphs  # the book's file format
 ```
 
 The root is a virtual manifest, so these cover all members by default — no
-`--workspace` needed. As of the last verified run the workspace has 116 tests
-(86 in `why-data` plus 7 doctests, 21 in `why-parser` plus 2 doctests), all
+`--workspace` needed. As of the last verified run the workspace has 135 tests
+(104 in `why-data` plus 8 doctests, 21 in `why-parser` plus 2 doctests), all
 passing, and clippy is clean workspace-wide (the warnings this file used to
 record were fixed in f9aee15).
 
@@ -112,6 +112,19 @@ this over random graphs. It also evaluates every estimand against the true
 effect of a random latent-confounder model, so run it after touching either
 file. Estimand *strings* can differ: C-INFER conditions each factor on its
 district's blanket, and ID conditions on every predecessor.
+
+[crates/why-data/src/graph/cinfer/counterfactual.rs](crates/why-data/src/graph/cinfer/counterfactual.rs)
+extends C-INFER to counterfactual queries (chapter 5, Correa, Lee & Bareinboim
+2021). It adds CUT unnesting, the Ξ collapse of consistent ctf-factors and a
+counterfactual Γ, and reuses the layer-2 d-trees through `grow_input_tree`.
+`CtfQuery::parse` reads textbook notation such as `P(y_x | x')`. Its
+`estimands_are_numerically_sound` test builds random SCMs with response
+functions and per-variable noise shared across worlds. It checks every
+estimand against the exact counterfactual probability, and checks that
+`P(y_x)` is identified exactly when layer 2 identifies it. It takes about 30s
+in debug. The book's Python (`_counterfactual_engine.py`) is not a reliable
+oracle: its `simplify` zeroes any variable with two values across worlds, and
+its ancestral components never merge across bidirected edges.
 
 ### σ-calculus
 

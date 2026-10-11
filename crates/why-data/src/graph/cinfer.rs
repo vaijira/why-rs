@@ -29,6 +29,9 @@
 //! Bareinboim, which identifies each target c-factor from whichever single
 //! input can produce it.
 //!
+//! Counterfactual queries — layer 3, the book's chapter 5 — are handled by
+//! [`counterfactual`], which adds the Ξ-operator and reuses these d-trees.
+//!
 //! ```
 //! use why_data::graph::cinfer::{Input, Query, c_infer};
 //! use why_data::graph::dseparation::Admg;
@@ -52,6 +55,8 @@ use std::fmt;
 use super::EdgeRef;
 use super::dseparation::{Admg, DSepError};
 use super::identification::{Dist, Formula};
+
+pub mod counterfactual;
 
 /// A set of variable names.
 pub type VarSet = BTreeSet<String>;
@@ -262,11 +267,11 @@ impl fmt::Display for Term {
 
 /// A node of a [`CTree`].
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CTreeNode {
+pub struct CTreeNode<T = Term, O = Operator> {
     /// What the node stands for.
-    pub term: Term,
+    pub term: T,
     /// The operator on the edge from the parent; `None` at the root.
-    pub op_from_parent: Option<Operator>,
+    pub op_from_parent: Option<O>,
     /// The parent's index; `None` at the root.
     pub parent: Option<usize>,
     /// The children's indices.
@@ -280,16 +285,19 @@ pub struct CTreeNode {
 /// product of its `δ` children. In a d-tree the root is an input and
 /// evaluation flows *down*: each node is its parent with its edge's operator
 /// applied.
+///
+/// The term and operator types default to the interventional ones; the
+/// counterfactual q-tree of [`counterfactual`] uses its own.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CTree {
+pub struct CTree<T = Term, O = Operator> {
     /// Every node, the root first.
-    pub nodes: Vec<CTreeNode>,
+    pub nodes: Vec<CTreeNode<T, O>>,
     /// The root's index.
     pub root: usize,
 }
 
-impl CTree {
-    fn new(term: Term) -> Self {
+impl<T: PartialEq, O> CTree<T, O> {
+    fn new(term: T) -> Self {
         Self {
             nodes: vec![CTreeNode {
                 term,
@@ -304,7 +312,7 @@ impl CTree {
     /// Adds `term` under `parent`, or returns the existing child that already
     /// stands for it, so that d-tree paths for different leaves share their
     /// common prefix.
-    fn add_child(&mut self, parent: usize, term: Term, op: Operator) -> usize {
+    fn add_child(&mut self, parent: usize, term: T, op: O) -> usize {
         if let Some(&existing) = self.nodes[parent]
             .children
             .iter()
@@ -323,29 +331,12 @@ impl CTree {
         idx
     }
 
-    /// The c-factor at `idx`, if it holds one rather than the query.
-    #[must_use]
-    pub fn factor(&self, idx: usize) -> Option<&CFactor> {
-        match &self.nodes[idx].term {
-            Term::Factor(c) => Some(c),
-            Term::Query(_) => None,
-        }
-    }
-
     /// The nodes without children, in insertion order.
     #[must_use]
     pub fn leaves(&self) -> Vec<usize> {
         (0..self.nodes.len())
             .filter(|&i| self.nodes[i].children.is_empty())
             .collect()
-    }
-
-    /// The first node standing for `factor`.
-    #[must_use]
-    pub fn find(&self, factor: &CFactor) -> Option<usize> {
-        self.nodes
-            .iter()
-            .position(|n| matches!(&n.term, Term::Factor(c) if c == factor))
     }
 
     /// The indices from the root down to `idx`, both included.
@@ -360,7 +351,28 @@ impl CTree {
         path.reverse();
         path
     }
+}
 
+impl CTree {
+    /// The c-factor at `idx`, if it holds one rather than the query.
+    #[must_use]
+    pub fn factor(&self, idx: usize) -> Option<&CFactor> {
+        match &self.nodes[idx].term {
+            Term::Factor(c) => Some(c),
+            Term::Query(_) => None,
+        }
+    }
+
+    /// The first node standing for `factor`.
+    #[must_use]
+    pub fn find(&self, factor: &CFactor) -> Option<usize> {
+        self.nodes
+            .iter()
+            .position(|n| matches!(&n.term, Term::Factor(c) if c == factor))
+    }
+}
+
+impl<T: fmt::Display, O: fmt::Display> CTree<T, O> {
     fn write_node(
         &self,
         f: &mut fmt::Formatter<'_>,
@@ -387,7 +399,7 @@ impl CTree {
     }
 }
 
-impl fmt::Display for CTree {
+impl<T: fmt::Display, O: fmt::Display> fmt::Display for CTree<T, O> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.write_node(f, self.root, "", true)
     }
@@ -619,6 +631,16 @@ pub fn gen_input_tree(
             return Err(DSepError::Unknown(z.clone()));
         }
     }
+    let targets: Vec<CFactor> = target_leaves(query, t_q)
+        .into_iter()
+        .map(|(_, c)| c.clone())
+        .collect();
+    grow_input_tree(g, input, &targets)
+}
+
+/// The d-tree of `input` towards each of `targets`, as [`gen_input_tree`]
+/// describes; the `σ` step reads a reached target in its own regime.
+fn grow_input_tree(g: &Admg, input: &Input, targets: &[CFactor]) -> Result<CTree, DSepError> {
     let z = &input.doing;
     let v: VarSet = g.variables().into_iter().map(ToString::to_string).collect();
     let mut tree = CTree::new(Term::Factor(CFactor {
@@ -626,7 +648,7 @@ pub fn gen_input_tree(
         doing: z.clone(),
     }));
 
-    for (_, leaf) in target_leaves(query, t_q) {
+    for leaf in targets {
         let d = &leaf.scope;
         if !d.is_disjoint(z) {
             continue;
@@ -644,7 +666,7 @@ pub fn gen_input_tree(
                     Term::Factor(leaf.clone()),
                     Operator::Regime {
                         from: z.clone(),
-                        to: query.x.clone(),
+                        to: leaf.doing.clone(),
                     },
                 );
                 break;
@@ -1149,14 +1171,14 @@ mod tests {
     }
 
     /// Deterministic randomness, so failures reproduce.
-    fn splitmix(mut z: u64) -> u64 {
+    pub(super) fn splitmix(mut z: u64) -> u64 {
         z = z.wrapping_add(0x9e37_79b9_7f4a_7c15);
         z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
         z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
         z ^ (z >> 31)
     }
 
-    fn unit(h: u64) -> f64 {
+    pub(super) fn unit(h: u64) -> f64 {
         // 53 random mantissa bits; the cast is exact.
         #[allow(clippy::cast_precision_loss)]
         let u = (h >> 11) as f64 / (1u64 << 53) as f64;

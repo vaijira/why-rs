@@ -24,7 +24,7 @@
 //! assert_eq!(estimand.to_string(), "sum_{z} P(y | z, x) P(z)");
 //! ```
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt;
 
 use super::dseparation::{Admg, DSepError};
@@ -286,6 +286,72 @@ impl Formula {
                 den.rename(from, to);
             }
         }
+    }
+
+    /// Renames the free occurrences of each key of `map` to its value, all at
+    /// once, leaving names bound by a sum alone.
+    ///
+    /// A sum binding one of the new names would capture it, so such an index
+    /// is primed first, to a name used nowhere in the formula or the map.
+    pub(crate) fn substitute_free(&mut self, map: &BTreeMap<String, String>) {
+        fn names(f: &Formula, out: &mut BTreeSet<String>) {
+            match f {
+                Formula::P { vars, given, doing } => {
+                    out.extend(vars.iter().chain(given).chain(doing).cloned());
+                }
+                Formula::Product(fs) => fs.iter().for_each(|f| names(f, out)),
+                Formula::Ratio { num, den } => {
+                    names(num, out);
+                    names(den, out);
+                }
+                Formula::Sum { over, body } => {
+                    out.extend(over.iter().cloned());
+                    names(body, out);
+                }
+            }
+        }
+        fn walk(f: &mut Formula, map: &BTreeMap<String, String>, taken: &mut BTreeSet<String>) {
+            match f {
+                Formula::P { vars, given, doing } => {
+                    for s in vars.iter_mut().chain(given.iter_mut()).chain(doing.iter_mut()) {
+                        if let Some(to) = map.get(s.as_str()) {
+                            s.clone_from(to);
+                        }
+                    }
+                }
+                Formula::Product(fs) => fs.iter_mut().for_each(|f| walk(f, map, taken)),
+                Formula::Ratio { num, den } => {
+                    walk(num, map, taken);
+                    walk(den, map, taken);
+                }
+                Formula::Sum { over, body } => {
+                    let targets: BTreeSet<&str> = map.values().map(String::as_str).collect();
+                    for slot in over.iter_mut() {
+                        if targets.contains(slot.as_str()) {
+                            let mut fresh = format!("{slot}'");
+                            while taken.contains(&fresh) {
+                                fresh.push('\'');
+                            }
+                            taken.insert(fresh.clone());
+                            body.rename(slot, &fresh);
+                            *slot = fresh;
+                        }
+                    }
+                    // Names this sum binds are not free inside it.
+                    let inner: BTreeMap<String, String> = map
+                        .iter()
+                        .filter(|(k, _)| !over.contains(k))
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect();
+                    walk(body, &inner, taken);
+                }
+            }
+        }
+        let mut taken = BTreeSet::new();
+        names(self, &mut taken);
+        taken.extend(map.keys().cloned());
+        taken.extend(map.values().cloned());
+        walk(self, map, &mut taken);
     }
 
     /// Primes any summation index that collides with a free variable.
