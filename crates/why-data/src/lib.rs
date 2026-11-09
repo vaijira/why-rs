@@ -8,6 +8,8 @@
 
 //! Causal data structures.
 
+// Documented by its own `//!` header.
+pub mod fairness;
 /// Causal graph support
 pub mod graph;
 // Documented by its own `//!` header, which is where the intra-doc links
