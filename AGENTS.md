@@ -11,7 +11,7 @@ only, no `[package]`. Every crate lives under [crates/](crates/).
 
 | Crate | Role |
 | --- | --- |
-| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-calculus, σ-calculus, ID, C-INFER, symbolic SCMs, causal fairness (chapter 6: Algorithms 15–18) |
+| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-calculus, σ-calculus, ID, C-INFER, symbolic SCMs, causal fairness and explanations (chapter 6: Algorithms 15–18, L3 Shapley values) |
 | [crates/why-parser/](crates/why-parser/) | Parsers: dagitty (pest) and the book's section format (`<NODES>`, `<EDGES>`, `<TASK>`, `<QUERY>`, `<INTERVENTIONS>`) |
 | [crates/why-ui/](crates/why-ui/) | `cdylib`+`rlib` WASM front end built with `dominator` |
 
@@ -88,12 +88,13 @@ cargo run -p why-data --example chapter4_part2   # do-calculus + ID
 cargo run -p why-data --example chapter4_cinfer  # C-INFER, q-trees and d-trees
 cargo run -p why-data --example chapter6_fairness   # Tasks 1–2 (no notebook; see below)
 cargo run -p why-data --example chapter6_decisions  # Task 3, checks the book's Ex. 6.32/6.35 numbers
+cargo run -p why-data --example chapter6_explanations  # §6.2: SHAP vs do-Shapley vs L3, Ex. 6.37–6.43
 cargo run -p why-parser --example notebook_graphs  # the book's file format
 ```
 
 The root is a virtual manifest, so these cover all members by default — no
-`--workspace` needed. As of the last verified run the workspace has 166 tests
-(129 in `why-data` plus 14 doctests, 21 in `why-parser` plus 2 doctests), all
+`--workspace` needed. As of the last verified run the workspace has 174 tests
+(136 in `why-data` plus 15 doctests, 21 in `why-parser` plus 2 doctests), all
 passing, and clippy is clean workspace-wide (the warnings this file used to
 record were fixed in f9aee15).
 
@@ -182,10 +183,38 @@ so nothing was ported from it; the source is section 6.1.4 of the book
 (pp. 450–487 of the Oct 2025 draft). Ex. 6.21 (college admissions over time) is not ported because the
 book gives no initial values for κ, λ, α, β.
 
-Not implemented: section 6.2 (causal explanations, still a draft in the
-book), BN-sets over individual columns rather than whole blocks, principal
+Not implemented here: BN-sets over individual columns rather than whole blocks, principal
 fairness (Def. 6.1.36, which the book argues against), and continuous
 covariates (bin them).
+
+### Causal explanations
+
+[crates/why-data/src/explain.rs](crates/why-data/src/explain.rs) implements
+section 6.2 (marked as a draft in the book): the NTE, the GDE and
+counterfactual (L3) Shapley values, plus SHAP (L1) and do-Shapley (L2) for
+comparison. Everything reduces to one mean per set `S`,
+`m(S) = Σ_s P(S = s) E[Y_{S=s} | e]`, from which `NTE(S) = m(∅) − m(S)`,
+`GDE_S(X) = m(S) − m(S ∪ {X})`, and `φ^L3` is the Shapley value of the game
+`v(S) = NTE(S)`.
+
+- **It works on an `scm::Model`, not on data.** `E[Y_s | e]` conditions on
+  evidence that includes `Y`, e.g. `P(y_x | x', y')`. That is not identifiable
+  from L1/L2 data even without confounding (Thm 6.1.13 (iv)), and
+  `ctf_infer` rejects it as an inconsistent ctf-factor. The book's examples
+  all assume a known SCM too.
+- `E[Y_s | e]` uses `scm`'s shared exogenous draw. It intervenes, takes Y's
+  qualified name in that world (`{y}_{x=1}`), and tabulates it with the
+  evidence from the **observational** world. Evidence names must be resolved
+  there: inside an intervened world, `"x"` resolves to that world's copy.
+- Cost is `2^|X|` subsets times `|D_S|` interventions, each a full
+  enumeration of `U`. Exact Shapley values are capped at 20 variables.
+- The tests are the book's Ex. 6.37–6.43 with exact numbers, plus random
+  SCMs checking efficiency (Cor. 6.2.2), Thm 6.2.1 along an ordering, and
+  admissibility for a variable with no path to `Y`.
+
+Possible follow-ups: identification of individual `m(S)` terms through
+`ctf_infer` when the evidence excludes `Y`, bounds when it does not, and
+permutation-sampled Shapley values for larger `X`.
 
 ### σ-calculus
 
