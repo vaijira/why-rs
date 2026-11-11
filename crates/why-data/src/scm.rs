@@ -754,7 +754,7 @@ impl Model {
     }
 
     /// Every assignment to `U` paired with its probability.
-    fn exogenous_assignments(&self) -> Vec<(HashMap<String, Value>, f64)> {
+    pub(crate) fn exogenous_assignments(&self) -> Vec<(HashMap<String, Value>, f64)> {
         let supports: Vec<(String, Vec<Value>)> = self
             .u
             .iter()
@@ -1126,7 +1126,7 @@ fn build_world(
 ///
 /// The head of an [`Expr::Apply`] is a function symbol rather than a variable,
 /// so it is deliberately not collected: `f_x(u_x)` depends on `u_x` alone.
-fn free_vars(e: &Expr, out: &mut HashSet<String>) {
+pub(crate) fn free_vars(e: &Expr, out: &mut HashSet<String>) {
     match e {
         Expr::Variable(name) => {
             out.insert(name.clone());
@@ -1208,7 +1208,7 @@ fn substitute(e: &Expr, map: &HashMap<String, Expr>) -> Expr {
 }
 
 /// Evaluates an expression to a discrete value under a total assignment.
-fn eval(e: &Expr, env: &HashMap<String, Value>) -> Result<Value, ScmError> {
+pub(crate) fn eval(e: &Expr, env: &HashMap<String, Value>) -> Result<Value, ScmError> {
     let int = |e: &Expr| -> Result<i64, ScmError> { Ok(eval(e, env)?.as_int()) };
     let boolean = |e: &Expr| -> Result<bool, ScmError> { Ok(eval(e, env)?.as_bool()) };
 

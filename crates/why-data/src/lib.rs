@@ -9,6 +9,8 @@
 //! Causal data structures.
 
 // Documented by its own `//!` header.
+pub mod crl;
+// Documented by its own `//!` header.
 pub mod explain;
 // Documented by its own `//!` header.
 pub mod fairness;

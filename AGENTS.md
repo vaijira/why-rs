@@ -11,7 +11,7 @@ only, no `[package]`. Every crate lives under [crates/](crates/).
 
 | Crate | Role |
 | --- | --- |
-| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-calculus, σ-calculus, ID, C-INFER, symbolic SCMs, causal fairness and explanations (chapter 6: Algorithms 15–18, L3 Shapley values) |
+| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-calculus, σ-calculus, ID, C-INFER, symbolic SCMs, causal fairness and explanations (chapter 6: Algorithms 15–18, L3 Shapley values), causal RL (chapter 8: CDMs, NUC/SBC, IPW/DP, Algorithms 19–21) |
 | [crates/why-parser/](crates/why-parser/) | Parsers: dagitty (pest) and the book's section format (`<NODES>`, `<EDGES>`, `<TASK>`, `<QUERY>`, `<INTERVENTIONS>`) |
 | [crates/why-ui/](crates/why-ui/) | `cdylib`+`rlib` WASM front end built with `dominator` |
 
@@ -89,12 +89,13 @@ cargo run -p why-data --example chapter4_cinfer  # C-INFER, q-trees and d-trees
 cargo run -p why-data --example chapter6_fairness   # Tasks 1–2 (no notebook; see below)
 cargo run -p why-data --example chapter6_decisions  # Task 3, checks the book's Ex. 6.32/6.35 numbers
 cargo run -p why-data --example chapter6_explanations  # §6.2: SHAP vs do-Shapley vs L3, Ex. 6.37–6.43
+cargo run -p why-data --example chapter8_crl  # Ex. 8.6, 8.16–8.18, 8.23–8.25, RCT vs UCB
 cargo run -p why-parser --example notebook_graphs  # the book's file format
 ```
 
 The root is a virtual manifest, so these cover all members by default — no
-`--workspace` needed. As of the last verified run the workspace has 174 tests
-(136 in `why-data` plus 15 doctests, 21 in `why-parser` plus 2 doctests), all
+`--workspace` needed. As of the last verified run the workspace has 196 tests
+(154 in `why-data` plus 19 doctests, 21 in `why-parser` plus 2 doctests), all
 passing, and clippy is clean workspace-wide (the warnings this file used to
 record were fixed in f9aee15).
 
@@ -215,6 +216,56 @@ comparison. Everything reduces to one mean per set `S`,
 Possible follow-ups: identification of individual `m(S)` terms through
 `ctf_infer` when the evidence excludes `Y`, bounds when it does not, and
 permutation-sampled Shapley values for larger `X`.
+
+### Causal reinforcement learning
+
+[crates/why-data/src/crl.rs](crates/why-data/src/crl.rs) implements chapter 8,
+sections 8.1–8.2.3.1. Like `fairness`, it has no new dependency, so it is
+WASM-safe. It reuses `fairness::Dataset` (re-exported as `crl::Dataset`) and
+`fairness::SplitMix64`.
+
+| File | Book |
+| --- | --- |
+| `space.rs` | `PolicySpace` (Def. 8.1.1, `validate` checks the non-descendant constraints), `Reward` (Def. 8.1.2) |
+| `policy.rs` | `Policy` trait: `Deterministic`, `Stochastic`, `Uniform` (π_UNIF), `TabularPolicy` |
+| `conditions.rs` | `nuc` (Def. 8.2.1, on an `scm::Model`), `sequential_backdoor` (Def. 8.2.3, on an `Admg`) |
+| `offpolicy.rs` | `ipw` (Thm 8.2.1), `dp` (Thm 8.2.2), `optimize` (backward induction or enumeration) |
+| `cdm.rs` | `Cdm` (Def. 8.1.3, exact evaluation and planning, also an `Environment`), `Task` (Def. 8.1.4) with `run` = Algorithm 19 |
+| `online.rs` | `Rct` (Algorithm 20), `Ucb` (Algorithm 21), Thm 8.2.4/8.2.5 bounds, Eq. 8.101 |
+
+Facts that are easy to get wrong:
+
+- **Propensities and Q-functions condition on the history
+  `X̄_{i−1} ∪ S̄_i`**, not on `S_i`. `PolicySpace` keeps one temporal ordering
+  of all `S`/`X` variables, so every history is a prefix of it. The
+  estimators key cells by prefix.
+- **IPW and DP are the same plug-in functional.** They agree to 1e-10 on any
+  data set, whether or not NUC or SBC holds. The random-SCM test asserts
+  this, and that SBC ⇒ both equal `Cdm::evaluate` (Thm 8.2.8),
+  NUC ⇒ SBC (Cor. 8.2.7), and that data under any policy evaluate any other
+  (Lemma 8.2.3).
+- **`Cdm::optimal` runs `optimize` on the exact table under π_UNIF.** That
+  table satisfies Exp-NUC and full positivity, so the plan is exact.
+  `optimize` uses backward induction only with perfect recall
+  (`S_i = X̄_{i−1} ∪ S̄_i`). Otherwise it enumerates deterministic policies,
+  capped at 200 000.
+- **Positivity is an error, not a dropped term**: `CrlError::Positivity`
+  names the stage, history and action. Rules must sum to 1 over the levels
+  the data shows for the action.
+- The DTR of Eq. 8.2 has continuous noise, so it cannot be an `scm::Model`.
+  The tests and the example build its exact table in closed form. Y has an
+  extra logistic noise `U5` (listed in Eq. 8.80, missing from Eq. 8.2),
+  without which Table 8.5 cannot be reproduced. Its exact optimum is
+  0.67574. The book prints 0.6758, which comes from rounded Q-values.
+
+Book errata found while porting: Eq. 8.119 should read `Y ← S1 ⊕ X2 ⊕ U3`,
+not `S1 ⊕ X1 ⊕ U3`. Tables 8.7–8.8, Eq. 8.124 and the text's back-door path
+all need X2. Eq. 8.101's "N ≈ 878" uses `log₁₀`; the natural log, which the
+derivation implies, gives 2021.
+
+Not implemented: infinite-horizon MDP planning (Ex. 8.5) and do-calculus
+policy identification (Sec. 8.2.3.2). When SBC fails, `Task::run` returns
+`NotIdentifiable`.
 
 ### σ-calculus
 
