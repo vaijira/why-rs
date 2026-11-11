@@ -48,6 +48,9 @@ name = "chapter6_explanations"
 [[example]]
 name = "chapter8_crl"
 
+[[example]]
+name = "chapter9_crl"
+
 # WASM-only opt-ins. `rssn` reaches three generations of `rand`, and each
 # `getrandom` behind them refuses to build for wasm32-unknown-unknown until a
 # source of randomness is named; `uuid` does the same. Cargo features are

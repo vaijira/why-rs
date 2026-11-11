@@ -53,7 +53,7 @@ impl OnlineRun {
 }
 
 /// Column positions of the actions and reward signals in a sample.
-fn positions(
+pub(super) fn positions(
     env: &dyn Environment,
     space: &PolicySpace,
     reward: &Reward,
@@ -129,7 +129,7 @@ impl Rct {
     }
 }
 
-fn finish(
+pub(super) fn finish(
     env: &dyn Environment,
     rows: Vec<Vec<String>>,
     action_pos: &[usize],
@@ -184,43 +184,62 @@ impl Ucb {
         episodes: usize,
         seed: u64,
     ) -> Result<OnlineRun, CrlError> {
-        let space = PolicySpace::bandit(action);
-        let arms = env
-            .domain(action)
-            .ok_or_else(|| CrlError::Unknown(action.to_string()))?;
-        let (action_pos, signal_pos) = positions(env, &space, reward)?;
-        let mut rng = SplitMix64::new(seed);
-        let mut uniform = || rng.unit();
-
-        let mut pulls = vec![0usize; arms.len()];
-        let mut sums = vec![0.0; arms.len()];
-        let mut rows = Vec::with_capacity(episodes);
-        for t in 1..=episodes {
-            let log_inv_delta = 4.0 * (t as f64).ln();
-            let mut best = 0;
-            let mut best_ucb = f64::NEG_INFINITY;
-            for x in 0..arms.len() {
-                let ucb = if pulls[x] == 0 {
-                    f64::INFINITY
-                } else {
-                    let n = pulls[x] as f64;
-                    sums[x] / n + (log_inv_delta / (2.0 * n)).sqrt()
-                };
-                if ucb > best_ucb {
-                    best = x;
-                    best_ucb = ucb;
-                }
-            }
-            let arm = arms[best].clone();
-            let pi = Deterministic(move |_: &str, _: &State<'_>| arm.clone());
-            let row = env.intervene(&space, &pi, &mut uniform)?;
-            let r = reward.apply_str(signal_pos.iter().map(|&p| row[p].as_str()))?;
-            pulls[best] += 1;
-            sums[best] += r;
-            rows.push(row);
-        }
-        finish(env, rows, &action_pos, &signal_pos, reward, None)
+        index_policy(env, action, reward, episodes, seed, &|t, _, n, sum| {
+            ucb_index(t, n, sum)
+        })
     }
+}
+
+/// `Ê[Y] + sqrt(log(1/δ) / (2N))` with `δ = t^{−4}`, or `∞` when `N = 0`.
+pub(super) fn ucb_index(t: usize, n: f64, sum: f64) -> f64 {
+    if n <= 0.0 {
+        f64::INFINITY
+    } else {
+        let log_inv_delta = 4.0 * (t as f64).ln();
+        sum / n + (log_inv_delta / (2.0 * n)).sqrt()
+    }
+}
+
+/// Plays, in each episode `t`, the first arm maximising
+/// `index(t, arm, pulls, reward sum)`.
+pub(super) fn index_policy(
+    env: &mut dyn Environment,
+    action: &str,
+    reward: &Reward,
+    episodes: usize,
+    seed: u64,
+    index: &dyn Fn(usize, usize, f64, f64) -> f64,
+) -> Result<OnlineRun, CrlError> {
+    let space = PolicySpace::bandit(action);
+    let arms = env
+        .domain(action)
+        .ok_or_else(|| CrlError::Unknown(action.to_string()))?;
+    let (action_pos, signal_pos) = positions(env, &space, reward)?;
+    let mut rng = SplitMix64::new(seed);
+    let mut uniform = || rng.unit();
+
+    let mut pulls = vec![0usize; arms.len()];
+    let mut sums = vec![0.0; arms.len()];
+    let mut rows = Vec::with_capacity(episodes);
+    for t in 1..=episodes {
+        let mut best = 0;
+        let mut best_index = f64::NEG_INFINITY;
+        for x in 0..arms.len() {
+            let v = index(t, x, pulls[x] as f64, sums[x]);
+            if v > best_index {
+                best = x;
+                best_index = v;
+            }
+        }
+        let arm = arms[best].clone();
+        let pi = Deterministic(move |_: &str, _: &State<'_>| arm.clone());
+        let row = env.intervene(&space, &pi, &mut uniform)?;
+        let r = reward.apply_str(signal_pos.iter().map(|&p| row[p].as_str()))?;
+        pulls[best] += 1;
+        sums[best] += r;
+        rows.push(row);
+    }
+    finish(env, rows, &action_pos, &signal_pos, reward, None)
 }
 
 /// Thm 8.2.4: the regret of [`Rct`] with `N` trials after `T` episodes, for

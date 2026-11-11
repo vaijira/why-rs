@@ -115,28 +115,12 @@ impl Cdm {
             }
         }
 
-        let mut support: HashMap<String, Vec<Value>> = HashMap::new();
-        for (mut env, _) in model.exogenous_assignments() {
-            for (k, e) in world.equations() {
-                let v = eval(e, &env)?;
-                env.insert(k.clone(), v);
-                let s = support.entry(k.clone()).or_default();
-                if !s.contains(&v) {
-                    s.push(v);
-                }
-            }
-        }
-        for s in support.values_mut() {
-            if s.iter().all(|v| matches!(v, Value::Bool(_))) {
-                *s = vec![Value::Bool(false), Value::Bool(true)];
-            }
-            s.sort();
-        }
+        let domains = endogenous_domains(&model)?;
         Ok(Self {
             model,
             space,
             reward,
-            domains: support,
+            domains,
         })
     }
 
@@ -458,16 +442,7 @@ impl Cdm {
         policy: Option<(&PolicySpace, &dyn Policy)>,
         uniform: &mut dyn FnMut() -> f64,
     ) -> Result<Vec<String>, CrlError> {
-        let mut env: HashMap<String, Value> = HashMap::new();
-        for u in self.model.exogenous() {
-            let dist = self.model.distribution(u).expect("declared exogenous");
-            let options: Vec<(Value, f64)> = dist
-                .support()
-                .into_iter()
-                .map(|v| (v, dist.probability(v)))
-                .collect();
-            env.insert(u.clone(), draw(&options, uniform()));
-        }
+        let mut env = sample_exogenous(&self.model, uniform);
         for step in steps {
             match step {
                 Step::Equation(k, e) => {
@@ -489,8 +464,70 @@ impl Cdm {
     }
 }
 
+/// The domain of every endogenous variable of `model`: its observational
+/// support, widened to both booleans for a boolean variable, sorted.
+pub(crate) fn endogenous_domains(model: &Model) -> Result<HashMap<String, Vec<Value>>, CrlError> {
+    let world = model.world(model.observational()).world();
+    let mut support: HashMap<String, Vec<Value>> = HashMap::new();
+    for (mut env, _) in model.exogenous_assignments() {
+        for (k, e) in world.equations() {
+            let v = eval(e, &env)?;
+            env.insert(k.clone(), v);
+            let s = support.entry(k.clone()).or_default();
+            if !s.contains(&v) {
+                s.push(v);
+            }
+        }
+    }
+    for s in support.values_mut() {
+        if s.iter().all(|v| matches!(v, Value::Bool(_))) {
+            *s = vec![Value::Bool(false), Value::Bool(true)];
+        }
+        s.sort();
+    }
+    Ok(support)
+}
+
+/// One draw of every exogenous variable of `model`.
+pub(crate) fn sample_exogenous(
+    model: &Model,
+    uniform: &mut dyn FnMut() -> f64,
+) -> HashMap<String, Value> {
+    let mut env = HashMap::new();
+    for u in model.exogenous() {
+        let dist = model.distribution(u).expect("declared exogenous");
+        let options: Vec<(Value, f64)> = dist
+            .support()
+            .into_iter()
+            .map(|v| (v, dist.probability(v)))
+            .collect();
+        env.insert(u.clone(), draw(&options, uniform()));
+    }
+    env
+}
+
+/// Evaluates every endogenous variable of `model` at the exogenous values in
+/// `env`, holding the variables in `overrides` fixed: the unit `u` in the
+/// world `M_x`. Counterfactuals across worlds share `env`.
+pub(crate) fn evaluate_world(
+    model: &Model,
+    env: &HashMap<String, Value>,
+    overrides: &[(&str, Value)],
+) -> Result<HashMap<String, Value>, CrlError> {
+    let world = model.world(model.observational()).world();
+    let mut out = env.clone();
+    for (k, e) in world.equations() {
+        let v = match overrides.iter().find(|(o, _)| o == k) {
+            Some((_, v)) => *v,
+            None => eval(e, &out)?,
+        };
+        out.insert(k.clone(), v);
+    }
+    Ok(out)
+}
+
 /// Inverse-CDF draw from a finite distribution.
-fn draw(options: &[(Value, f64)], u: f64) -> Value {
+pub(crate) fn draw(options: &[(Value, f64)], u: f64) -> Value {
     let mut target = u * options.iter().map(|(_, p)| p).sum::<f64>();
     for (v, p) in options {
         if *p <= 0.0 {

@@ -1,5 +1,6 @@
-//! Causal reinforcement learning (chapter 8, "Reinforcement Learning through
-//! Causal Lenses").
+//! Causal reinforcement learning: chapter 8, "Reinforcement Learning through
+//! Causal Lenses", and the four CRL tasks plus causal game theory of
+//! chapter 9.
 //!
 //! # The objects
 //!
@@ -60,19 +61,85 @@
 //!   the action column, or the first value of the domain. In the DTR of
 //!   Ex. 8.6, `π₂*(0, 0, 1)` is a tie that the book resolves as `X₂ ← 1`.
 //!
-//! Not implemented: the infinite-horizon MDP planning of Ex. 8.5 and the
-//! do-calculus policy identification of Sec. 8.2.3.2. When the sequential
-//! back-door fails, [`Task::run`] reports [`CrlError::NotIdentifiable`]
-//! instead of falling back to those.
+//! Not implemented: the do-calculus policy identification of Sec. 8.2.3.2.
+//! When the sequential back-door fails, [`Task::run`] reports
+//! [`CrlError::NotIdentifiable`] instead of falling back to it. (Infinite-
+//! horizon planning for MDPs exists in the counterfactual form of chapter 9,
+//! [`CtfMdp::value_iteration`] and [`CtfMdp::experimental_value_iteration`],
+//! which reproduce Ex. 8.5's Table 8.1.)
+//!
+//! # Chapter 9: the CRL tasks
+//!
+//! * **Task 1, causal offline-to-online learning (Sec. 9.2).**
+//!   [`natural_bounds`] (Thm 9.2.2) and [`causal_bounds`] (Thms 9.2.5–9.2.6)
+//!   turn confounded observational data into bounds on interventional
+//!   quantities. [`CausalBounds::policy_bounds`] is Eq. 9.67. [`UcbPlus`] is
+//!   Algorithm 23, [`UcbTransfer`] the naive Algorithm 22 (UCB−), and
+//!   [`UcbCdm`] Algorithms 24 and 25 with optimistic planning over L1
+//!   confidence sets intersected with the bounds.
+//! * **Task 2, where to intervene (Sec. 9.3.1).** [`minimal_intervention_sets`]
+//!   (Prop. 9.3.1), [`muct`], [`interventional_border`] and [`pomis`]
+//!   (Thm 9.3.2), with [`latent_projection`].
+//! * **Task 3, counterfactual decision-making (Sec. 9.4).** [`ett`] tabulates
+//!   `E[Y_x | X = x′]` exactly. [`CtfRct`] and [`CtfUcb`] are Algorithms 26
+//!   and 27 on a [`CtfEnvironment`] such as [`CtfBandit`]. [`CtfMdp`] is
+//!   the counterfactual MDP of Eq. 9.174, built from a one-stage SCM, with
+//!   value iteration (Eq. 9.182). [`CtfUcbvi`] is Algorithms 28–29.
+//! * **Task 4, causal imitation learning (Sec. 9.5).** [`imitation_backdoor`]
+//!   (Def. 9.5.3), [`imitation_subspace`] and
+//!   [`is_minimal_imitation_admissible`] (Def. 9.5.5),
+//!   [`behavioral_cloning`] (Def. 9.5.2), [`imitation_distribution`]
+//!   (Thm 9.5.4) and [`causal_mwal`] (Prop. 9.5.5).
+//! * **Causal game theory (Sec. 9.6).** [`Bimatrix`] finds Nash equilibria
+//!   by support enumeration. [`CausalGame`] builds a causal normal form game
+//!   from an SCM (Def. 9.6.6). [`learn_cne`] is Algorithm 30 and
+//!   [`ctf_nash_learning`] Algorithm 31.
+//!
+//! Chapter 9 departures and errata:
+//!
+//! * **Thm 9.3.2 projects onto `X⋆ ∪ {Y}`**, not `X′ ∪ {Y}` as printed; with
+//!   the printed version `∅` would always be a POMIS.
+//! * **Eq. 9.98 should read `X ← U_D ⊕ U_B`.** Table 9.6, Eqs. 9.108–9.113
+//!   and Ex. 9.12 all need it without the negation.
+//! * **Table 9.9**'s block with `S_{i+1} = 0, X′_{i+1} = 1` repeats the
+//!   `X′_{i+1} = 0` block, so its rows do not sum to one. **Table 9.11**
+//!   prints `Q*(s, x′, x′) = 1`, where the Bellman equation gives
+//!   `0.1 + 0.9 · 9 = 8.2`. **Ex. 9.15** names `X ← ¬S` as the best
+//!   experimental policy; Ex. 8.5 (and the computation) give `X ← S`.
+//! * **Thm 9.5.4 needs condition 2 at every stage.** A stage admitted only
+//!   because `X_i` is not an ancestor of `Y` breaks Eq. 9.266 when `X_i` and
+//!   `Y` are confounded ([`imitation_distribution`] has the counterexample).
+//! * **Experiment 9.4's `r_π = 0.6283`** for `π = (X1 ← 1, X2 ← 0)` does not
+//!   follow from Table 9.3, whose every entry is reproduced: the exact bound
+//!   is `0.6788`, and no deterministic policy has `0.6283`.
+//! * **Equilibrium selection.** Defs. 9.6.8–9.6.9 take "a" Nash
+//!   equilibrium. [`Bimatrix::equilibrium`] takes the first pure one in
+//!   row-major order, which reproduces Tables 9.15 and 9.37(b).
+//! * **Eq. 9.197's bonus constant 7** keeps every Q-value at its cap `H` for
+//!   tens of thousands of episodes; [`CtfUcbvi::bonus`] makes it a parameter.
+//!
+//! Not implemented from chapter 9: mixed policies with context
+//! (Sec. 9.3.2, whose procedure the book defers to Lee & Bareinboim), hybrid policies
+//! under an autonomy budget (Sec. 9.4.3, a non-convex polynomial program),
+//! Causal GAIL (Prop. 9.5.6, which needs a neural discriminator), and the
+//! information-structure extensions of Secs. 9.6.5–9.6.6.
 
 mod cdm;
 mod conditions;
+mod cool;
+mod ctf;
+mod games;
+mod imitation;
+mod lp;
+mod mixed;
 mod offpolicy;
 mod online;
 mod policy;
 mod space;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests9;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
@@ -83,6 +150,27 @@ use crate::scm::{Model, ScmError, free_vars};
 pub use crate::fairness::Dataset;
 pub use cdm::{Assumptions, Cdm, Environment, Justification, Learned, Regime, Task};
 pub use conditions::{NucReport, NucViolation, SbcReport, SbcStage, nuc, sequential_backdoor};
+pub use cool::{
+    ArmBound, CausalBounds, CdmRun, Interval, UcbCdm, UcbPlus, UcbTransfer, causal_bounds,
+    natural_bounds, ucb_plus_regret_bound,
+};
+pub use ctf::{
+    CtfBandit, CtfEnvironment, CtfMdp, CtfMdpEnvironment, CtfMdpSimulator, CtfQ, CtfRct, CtfRun,
+    CtfUcb, CtfUcbvi, EttTable, ExpQ, StageVars, UcbviRun, ett,
+};
+pub use games::{
+    ActionSpace, Bimatrix, CausalGame, CausalNash, Components, CtfGameSample, CtfNashLearned, Equilibrium,
+    Layer, LayeredGame, Strategy, ctf_nash_learning, learn_cne,
+};
+pub use imitation::{
+    ConditionalPolicy, ConditionalRule, ImitationCondition, ImitationReport, ImitationStage,
+    Feature, MwalSolution, behavioral_cloning, causal_mwal, expert_distribution, imitation_backdoor,
+    imitation_distribution, imitation_subspace, is_minimal_imitation_admissible,
+};
+pub use mixed::{
+    interventional_border, is_minimal_intervention_set, latent_projection,
+    minimal_intervention_sets, muct, pomis,
+};
 pub use offpolicy::{Evaluation, Plan, QTable, dp, ipw, optimize};
 pub use online::{
     OnlineRun, Rct, Ucb, rct_optimal_trials, rct_regret_bound, ucb_regret_bound,

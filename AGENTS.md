@@ -11,7 +11,7 @@ only, no `[package]`. Every crate lives under [crates/](crates/).
 
 | Crate | Role |
 | --- | --- |
-| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-calculus, σ-calculus, ID, C-INFER, symbolic SCMs, causal fairness and explanations (chapter 6: Algorithms 15–18, L3 Shapley values), causal RL (chapter 8: CDMs, NUC/SBC, IPW/DP, Algorithms 19–21) |
+| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-calculus, σ-calculus, ID, C-INFER, symbolic SCMs, causal fairness and explanations (chapter 6: Algorithms 15–18, L3 Shapley values), causal RL (chapter 8: CDMs, NUC/SBC, IPW/DP, Algorithms 19–21; chapter 9: causal bounds, POMIS, counterfactual policies, causal imitation, causal games, Algorithms 22–31) |
 | [crates/why-parser/](crates/why-parser/) | Parsers: dagitty (pest) and the book's section format (`<NODES>`, `<EDGES>`, `<TASK>`, `<QUERY>`, `<INTERVENTIONS>`) |
 | [crates/why-ui/](crates/why-ui/) | `cdylib`+`rlib` WASM front end built with `dominator` |
 
@@ -90,14 +90,16 @@ cargo run -p why-data --example chapter6_fairness   # Tasks 1–2 (no notebook; 
 cargo run -p why-data --example chapter6_decisions  # Task 3, checks the book's Ex. 6.32/6.35 numbers
 cargo run -p why-data --example chapter6_explanations  # §6.2: SHAP vs do-Shapley vs L3, Ex. 6.37–6.43
 cargo run -p why-data --example chapter8_crl  # Ex. 8.6, 8.16–8.18, 8.23–8.25, RCT vs UCB
+cargo run -p why-data --example chapter9_crl  # Tables 9.2–9.3, 9.6–9.7, 9.15; UCB+, Ctf-UCB, CNE
 cargo run -p why-parser --example notebook_graphs  # the book's file format
 ```
 
 The root is a virtual manifest, so these cover all members by default — no
-`--workspace` needed. As of the last verified run the workspace has 196 tests
-(154 in `why-data` plus 19 doctests, 21 in `why-parser` plus 2 doctests), all
+`--workspace` needed. As of the last verified run the workspace has 223 tests
+(179 in `why-data` plus 21 doctests, 21 in `why-parser` plus 2 doctests), all
 passing, and clippy is clean workspace-wide (the warnings this file used to
-record were fixed in f9aee15).
+record were fixed in f9aee15). The tree is not rustfmt-clean, so do not run
+`cargo fmt` over it as part of an unrelated change.
 
 `why-data` has no Cargo features, and no `RUSTFLAGS` or `.cargo/config.toml` are
 involved. The `scm` module was gated behind a feature until `rssn` 0.2.12 made
@@ -263,9 +265,56 @@ not `S1 ⊕ X1 ⊕ U3`. Tables 8.7–8.8, Eq. 8.124 and the text's back-door pat
 all need X2. Eq. 8.101's "N ≈ 878" uses `log₁₀`; the natural log, which the
 derivation implies, gives 2021.
 
-Not implemented: infinite-horizon MDP planning (Ex. 8.5) and do-calculus
-policy identification (Sec. 8.2.3.2). When SBC fails, `Task::run` returns
-`NotIdentifiable`.
+Not implemented: do-calculus policy identification (Sec. 8.2.3.2). When SBC
+fails, `Task::run` returns `NotIdentifiable`. Infinite-horizon MDP planning
+(Ex. 8.5) exists only for tabular MDPs, through chapter 9's
+`CtfMdp::experimental_value_iteration`, which reproduces Table 8.1.
+
+### Causal RL tasks (chapter 9)
+
+Chapter 9 lives in the same `crl` module, one file per task. All of it is
+dependency-free and builds for WASM. [crates/why-data/src/crl/lp.rs](crates/why-data/src/crl/lp.rs)
+is a small dense two-phase simplex (Bland's rule) used by the optimistic
+planner, Causal MWAL and Nash support enumeration. The chapter 9 tests are in
+`crl/tests9.rs`.
+
+| File | Book |
+| --- | --- |
+| `cool.rs` | Task 1: `natural_bounds` (Thm 9.2.2), `causal_bounds` (Thms 9.2.5–9.2.6, `Γ` of Eq. 9.49), `policy_bounds` (Eq. 9.67), `UcbPlus` (Alg. 23), `UcbTransfer` (Alg. 22, UCB−), `UcbCdm` (Algs. 24/25) |
+| `mixed.rs` | Task 2 without context: `latent_projection`, MIS (Prop. 9.3.1), `muct`, `interventional_border`, `pomis` (Thm 9.3.2) |
+| `ctf.rs` | Task 3: `ett`, `CtfRct`/`CtfUcb` (Algs. 26/27) on a `CtfEnvironment`, `CtfMdp` (Eq. 9.174) with value iteration, `CtfUcbvi` (Algs. 28/29) |
+| `imitation.rs` | Task 4: `imitation_backdoor` (Def. 9.5.3), minimal subspaces (Def. 9.5.5), `behavioral_cloning`, `imitation_distribution` (Thm 9.5.4), `causal_mwal` (Prop. 9.5.5, exact LP) |
+| `games.rs` | Sec. 9.6: `Bimatrix` equilibria, `CausalGame` from an SCM, `learn_cne` (Alg. 30), `ctf_nash_learning` (Alg. 31, deterministic rewards) |
+
+Facts that are easy to get wrong:
+
+- **Thm 9.3.2 projects onto `X⋆ ∪ {Y}`**, not `X′ ∪ {Y}` as printed. The
+  `some_pomis_is_optimal_on_random_scms` test checks completeness against
+  brute force.
+- **Thm 9.5.4 is false when a stage passes only condition 1** of the
+  imitation backdoor (X_i not an ancestor of Y) while X_i and Y share a
+  confounder. `ImitationCondition::Blocked` takes precedence in reports so
+  callers can tell; `condition_1_breaks_theorem_9_5_4` is the counterexample.
+- **The greedy casino needs `X ← U_D ⊕ U_B`** (Eq. 9.98 prints a negation
+  that contradicts Table 9.6 and Ex. 9.12).
+- **Book table errata**: Table 9.9's `S′ = 0, X′′ = 1` block is a copy of the
+  `X′′ = 0` block; Table 9.11's `Q*(s, x′, x′)` should be 8.2, not 1; Ex. 9.15's
+  best experimental policy is `X ← S` (Table 8.1), not `X ← ¬S`; Fig. 9.36 is
+  truncated rather than rounded in places (compare Table 9.17).
+- **Experiment 9.4's `r_π = 0.6283` is not reproducible.** Every entry of
+  Table 9.3 is (to 4 decimals, by quadrature over U), and the exact bound for
+  that policy is 0.6788.
+- **Equilibrium selection** is the first pure NE in row-major order, which
+  reproduces Tables 9.15 and 9.37(b); the book leaves it open.
+- **Eq. 9.197's bonus constant 7** makes UCBVI stall at `Q = H` for any test-
+  sized run; `CtfUcbvi::bonus` exposes it, and the test uses 0.3.
+- Figures 9.12, 9.30 and 9.31 are not given as edge lists; the tests
+  reconstruct them from the c-factorisation and the worked examples, and
+  say so.
+
+Not implemented: mixed policies with context (Sec. 9.3.2), hybrid policies
+under an autonomy budget (Sec. 9.4.3), Causal GAIL (Prop. 9.5.6) and
+Secs. 9.6.5–9.6.6.
 
 ### σ-calculus
 
