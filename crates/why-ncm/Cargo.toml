@@ -15,3 +15,8 @@ burn = { version = "0.22.1", default-features = false, features = ["std", "flex"
 # Chapter 13 has no notebook; this reproduces the book's worked examples.
 [[example]]
 name = "chapter13_ncm"
+
+# Chapter 14 has no notebook either; this reproduces its examples and runs
+# Algorithm 50 on rendered images.
+[[example]]
+name = "chapter14_images"

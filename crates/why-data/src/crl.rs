@@ -130,7 +130,7 @@ mod cool;
 mod ctf;
 mod games;
 mod imitation;
-mod lp;
+pub(crate) mod lp;
 mod mixed;
 mod offpolicy;
 mod online;

@@ -227,3 +227,115 @@ fn algorithm_49_agrees_on_a_markovian_effect() {
     let freq = draws.iter().filter(|d| d[0] == "1").count() as f64 / 4000.0;
     assert!((freq - 0.7).abs() < 0.05, "{freq}");
 }
+
+/// Ex. 14.2 rendered as 8-pixel images: F, Y and H each light one of two
+/// pixels, an unlabelled smile lights a seventh, and the last is the
+/// brightness `t ∈ [0.6, 1]` that scales them all. Pixels carry Gaussian
+/// noise of 0.03.
+fn faces(n: usize, seed: u64) -> ImageData {
+    let mut rng = Rng::new(seed);
+    let mut bern = |p: f32| rng.unit() < p;
+    let mut rows = Vec::with_capacity(n);
+    let mut draws = Vec::with_capacity(n);
+    for _ in 0..n {
+        let (uf, uy, uh1, uh2) = (bern(0.4), bern(0.4), bern(0.4), bern(0.2));
+        let (f, y) = (uf ^ uy, uy);
+        let h = if y { uh2 } else { uh1 };
+        rows.push([f, y, h].map(|b| u8::from(b).to_string()).to_vec());
+        draws.push((f, y, h, bern(0.5)));
+    }
+    let images = draws
+        .into_iter()
+        .map(|(f, y, h, s)| {
+            let t = 0.6 + 0.4 * rng.unit();
+            let b = |x: bool| f32::from(u8::from(x));
+            let clean = [b(f), b(!f), b(y), b(!y), b(h), b(!h), b(s), 1.0];
+            clean
+                .iter()
+                .map(|x| x * t + 0.03 * normal_for_tests(&mut rng))
+                .collect()
+        })
+        .collect();
+    let labels = Dataset::from_records(["F", "Y", "H"], rows).unwrap();
+    ImageData::new(labels, images).unwrap()
+}
+
+fn normal_for_tests(rng: &mut Rng) -> f32 {
+    let (a, b) = (f64::from(rng.unit()).max(1e-12), f64::from(rng.unit()));
+    ((-2.0 * a.ln()).sqrt() * (std::f64::consts::TAU * b).cos()) as f32
+}
+
+/// The true labeller `h` of [`faces`].
+fn face_labels(image: &[f32]) -> [String; 3] {
+    [0, 2, 4].map(|k| u8::from(image[k] > image[k + 1]).to_string())
+}
+
+/// Algorithm 50 on Ex. 14.2: the ANCM fits `P(V)`, its F-ctf query lies in
+/// Ex. 14.9's bounds (Thm 14.3.2), and its edits keep the gender, change
+/// the age and render what they claim.
+#[test]
+fn algorithm_50_is_ctf_consistent() {
+    use why_data::ascm::{ctf_consistency, total_variation};
+
+    let g = graph(&[("Y", "H")], &[("F", "Y")]);
+    let data = faces(2000, 7);
+    let config = AncmConfig {
+        epochs: 40,
+        ..AncmConfig::default()
+    };
+    let model = ancm(&g, &data, &config).unwrap();
+
+    // Table 14.1, in binary counting order over (F, Y, H).
+    let truth = table(
+        &["F", "Y", "H"],
+        &[0.216, 0.144, 0.128, 0.032, 0.144, 0.096, 0.192, 0.048],
+    );
+    let fitted = model.ncm().distribution(8192, 1).unwrap();
+    let tv = total_variation(&truth, &fitted, &["F", "Y", "H"]).unwrap();
+    assert!(tv < 0.05, "P(V) is off by {tv}");
+
+    let query = q(&g, "P(f_{y'}, h'_{y'} | f, y, h)");
+    let values = [("F", "0"), ("Y", "1"), ("Y'", "0"), ("H", "0"), ("H'", "1")];
+    let value = model.ncm().estimate(&query, &values, 8192, 2).unwrap();
+    let c = ctf_consistency(&g, &truth, &fitted, &query, &values, value, 0.05).unwrap();
+    assert!(c.consistent, "{c:?}");
+
+    // Sampled pairs: do(Y = 0) keeps F, sets Y, and the decoder draws it.
+    let edits = model.sample(400, &[("Y", "0")], 3).unwrap();
+    let names = model.variables().to_vec();
+    let at = |n: &str| names.iter().position(|x| x == n).unwrap();
+    let (f, y) = (at("F"), at("Y"));
+    let mut drawn = 0;
+    for e in &edits {
+        assert_eq!(e.labels[f], e.edited_labels[f]);
+        assert_eq!(e.edited_labels[y], "0");
+        let shown = face_labels(&e.edited_image);
+        let claimed = [
+            &e.edited_labels[at("F")],
+            &e.edited_labels[y],
+            &e.edited_labels[at("H")],
+        ];
+        drawn += usize::from(shown.iter().zip(claimed).all(|(a, b)| a == b));
+    }
+    assert!(drawn >= 380, "only {drawn} of 400 edits show their labels");
+
+    // Editing data images: the labeller reads them, and the edit keeps F.
+    let (mut read, mut kept) = (0, 0);
+    for (k, image) in data.images().iter().take(200).enumerate() {
+        let truth: Vec<String> = ["F", "Y", "H"]
+            .iter()
+            .map(|n| data.labels().value(n, k).unwrap().to_string())
+            .collect();
+        let mine = model.label(image).unwrap();
+        read += usize::from(
+            names
+                .iter()
+                .zip(&mine)
+                .all(|(n, l)| truth[["F", "Y", "H"].iter().position(|x| x == n).unwrap()] == *l),
+        );
+        let e = model.edit(image, None, &[("Y", "0")], k as u64).unwrap();
+        kept += usize::from(face_labels(&e.edited_image)[0] == truth[0]);
+    }
+    assert!(read >= 190, "the labeller reads only {read} of 200");
+    assert!(kept >= 190, "only {kept} of 200 edits keep the gender");
+}

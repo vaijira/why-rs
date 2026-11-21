@@ -1,7 +1,8 @@
 //! Identification and estimation with NCMs: Algorithms 44–47 and 49.
 
 use burn::optim::{AdamConfig, GradientsParams};
-use burn::tensor::Tensor;
+use burn::tensor::{Tensor, activation};
+use why_data::fairness::Dataset;
 use why_data::graph::cinfer::Input;
 use why_data::graph::cinfer::counterfactual::{CtfError, CtfQuery, ctf_infer};
 use why_data::graph::dseparation::Admg;
@@ -126,6 +127,78 @@ impl Ncm {
             }
             Kind::Implicit => self.monte_carlo(e, m.max(1), seed),
         }
+    }
+
+    /// The observational distribution `P̂(V) = E_Û[Π_V P(v | pa_V, û_V)]`
+    /// over every joint level, from `m` draws of `Û`, as a data set whose
+    /// weights are the probabilities. Gumbel-max sampling draws from the same
+    /// softmax, so this holds for both kinds.
+    ///
+    /// # Errors
+    ///
+    /// [`NcmError::TooLarge`] when the joint has more than
+    /// [`NcmConfig::max_cells`] levels.
+    pub fn distribution(&self, m: usize, seed: u64) -> Result<Dataset, NcmError> {
+        let spec = &self.spec;
+        let n = spec.names.len();
+        let cells = spec
+            .levels
+            .iter()
+            .try_fold(1usize, |a, l| a.checked_mul(l.len()))
+            .filter(|c| *c <= self.max_cells)
+            .ok_or(NcmError::TooLarge(self.max_cells))?;
+        let m = m.max(1);
+        let noise = self.draw(m, &mut Rng::new(seed));
+        // probs[v][(cfg * m + s) * d + level]
+        let mut probs = Vec::with_capacity(n);
+        for v in 0..n {
+            let mut configs: Vec<Vec<usize>> = vec![Vec::new()];
+            for &p in &spec.parents[v] {
+                configs = configs
+                    .into_iter()
+                    .flat_map(|c| {
+                        (0..spec.levels[p].len()).map(move |l| {
+                            let mut c = c.clone();
+                            c.push(l);
+                            c
+                        })
+                    })
+                    .collect();
+            }
+            let (logits, _) = self.split(v, self.logits(v, &configs, &noise));
+            probs.push(values(activation::softmax(logits, 1)));
+        }
+        let mut rows = Vec::with_capacity(cells);
+        let mut weights = Vec::with_capacity(cells);
+        let mut a = vec![0usize; n];
+        for _ in 0..cells {
+            let mut per_draw = vec![1.0f64; m];
+            for v in 0..n {
+                let d = spec.levels[v].len();
+                let cfg = spec.parents[v]
+                    .iter()
+                    .fold(0, |at, &p| at * spec.levels[p].len() + a[p]);
+                for (s, w) in per_draw.iter_mut().enumerate() {
+                    *w *= f64::from(probs[v][(cfg * m + s) * d + a[v]]);
+                }
+            }
+            rows.push(
+                (0..n)
+                    .map(|v| spec.levels[v][a[v]].clone())
+                    .collect::<Vec<_>>(),
+            );
+            weights.push(per_draw.iter().sum::<f64>() / m as f64);
+            for v in (0..n).rev() {
+                a[v] += 1;
+                if a[v] < spec.levels[v].len() {
+                    break;
+                }
+                a[v] = 0;
+            }
+        }
+        Dataset::from_records(spec.names.clone(), rows)
+            .and_then(|d| d.with_weights(weights))
+            .map_err(|_| NcmError::NoData)
     }
 
     /// The mean log-likelihood `(1/n) Σ_i log P̂(v_i | do(z_i))` of an

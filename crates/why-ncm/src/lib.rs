@@ -13,6 +13,8 @@
 //! | [`fit`] | train an NCM on data alone (line 3 of Algorithm 45) |
 //! | [`neural_id`] | Algorithm 44 (`L2` query from `P(V)`) and Algorithm 46 (NeuralID), training as Algorithm 47 ([`Kind::Explicit`]) or Algorithm 49 ([`Kind::Implicit`]) |
 //! | [`symbolic_then_neural`] | Algorithm 45: decide with C-INFER, estimate with an NCM |
+//! | [`Ncm::distribution`] | the fitted `P̂(V)` |
+//! | [`ancm`], [`Ancm`] | Algorithm 50 (chapter 14): a G-NCM that generates labelled images, trained as a VAE; samples and edits of `P̂(I, I_{x′})` |
 //!
 //! # The two implementations
 //!
@@ -85,6 +87,7 @@ use std::fmt;
 use why_data::fairness::Dataset;
 use why_data::ncm::NcmError as StructureError;
 
+mod ancm;
 mod data;
 mod explicit;
 mod identify;
@@ -93,6 +96,7 @@ mod model;
 #[cfg(test)]
 mod tests;
 
+pub use ancm::{Ancm, AncmConfig, Edit, ImageData, ancm};
 pub use identify::{NeuralIdResult, Objective, fit, neural_id, symbolic_then_neural};
 pub use model::Ncm;
 
@@ -120,6 +124,8 @@ pub enum NcmError {
     /// Enumerating the query's worlds needs more cells than
     /// [`NcmConfig::max_cells`].
     TooLarge(usize),
+    /// Images that do not match their labels or one another.
+    BadImages(String),
 }
 
 impl From<StructureError> for NcmError {
@@ -149,6 +155,7 @@ impl fmt::Display for NcmError {
             Self::NoData => f.write_str("no data"),
             Self::ImpossibleCondition => f.write_str("the conditioning event has probability zero"),
             Self::TooLarge(n) => write!(f, "the query needs more than {n} cells"),
+            Self::BadImages(s) => write!(f, "bad images: {s}"),
         }
     }
 }

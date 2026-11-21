@@ -13,8 +13,8 @@ lives under [crates/](crates/).
 
 | Crate | Role |
 | --- | --- |
-| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-/σ-calculus, ID, C-INFER, symbolic SCMs, and the book's chapters 6, 8, 9, 11, 12 and the tensor-free part of 13 |
-| [crates/why-ncm/](crates/why-ncm/) | Neural causal models trained with `burn` (chapter 13). A separate crate so `burn` stays out of the `why-ui` bundle |
+| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-/σ-calculus, ID, C-INFER, symbolic SCMs, and the book's chapters 6, 8, 9, 11, 12, 14 and the tensor-free part of 13 |
+| [crates/why-ncm/](crates/why-ncm/) | Neural causal models trained with `burn` (chapter 13) and the ANCM image generator (chapter 14). A separate crate so `burn` stays out of the `why-ui` bundle |
 | [crates/why-parser/](crates/why-parser/) | Parsers: dagitty (pest) and the book's section format (`<NODES>`, `<EDGES>`, `<TASK>`, `<QUERY>`, `<INTERVENTIONS>`) |
 | [crates/why-ui/](crates/why-ui/) | `cdylib`+`rlib` WASM front end built with `dominator` |
 
@@ -37,6 +37,7 @@ static assets (`index.html`, images) live in
 | `transport` (chapter 11) | [transport-chapter11.md](docs/agents/transport-chapter11.md) |
 | `generalize` (chapter 12) | [generalize-chapter12.md](docs/agents/generalize-chapter12.md) |
 | `ncm`, `why-ncm` (chapter 13) | [ncm-chapter13.md](docs/agents/ncm-chapter13.md) |
+| `ascm`, `why_ncm::ancm` (chapter 14) | [ascm-chapter14.md](docs/agents/ascm-chapter14.md) |
 | `scm`, `rssn`, WASM builds | [rssn-wasm.md](docs/agents/rssn-wasm.md) |
 
 Each file lists the deliberate departures from the book, the errata found, and
@@ -115,14 +116,15 @@ cargo run -p why-data --example chapter9_crl  # Tables 9.2–9.3, 9.6–9.7, 9.1
 cargo run -p why-data --example chapter11_transport  # Exs. 11.5–11.34, Algs. 32–37
 cargo run -p why-data --example chapter12_generalize  # Exs. 12.1–12.20, Algs. 40–43
 cargo run -p why-ncm --example chapter13_ncm  # Exs. 13.6–13.16, Algs. 44–49 (trains; ~1 min)
+cargo run -p why-ncm --example chapter14_images  # Exs. 14.2–14.9, MNIST bounds, Alg. 50 (trains; ~75 s)
 cargo run -p why-parser --example notebook_graphs  # the book's file format
 ```
 
 The root is a virtual manifest, so these cover all members by default — no
-`--workspace` needed. As of the last verified run the workspace has 290 tests
-(222 in `why-data` plus 36 doctests, 8 in `why-ncm` plus 1 doctest, 21 in
+`--workspace` needed. As of the last verified run the workspace has 302 tests
+(232 in `why-data` plus 37 doctests, 9 in `why-ncm` plus 1 doctest, 21 in
 `why-parser` plus 2 doctests), all passing. The `why-ncm` tests train
-networks and take about 25 s. Clippy 1.100 reports one lint, `needless_range_loop` in
+networks and take about 27 s. Clippy 1.100 reports one lint, `needless_range_loop` in
 `fairness/estimate.rs`, which older toolchains did not flag; the warnings this
 file used to record were fixed in f9aee15. The tree is not rustfmt-clean, so do not run
 `cargo fmt` over it as part of an unrelated change.

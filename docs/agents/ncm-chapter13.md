@@ -48,6 +48,13 @@ Facts that are easy to get wrong:
   MMD²; the square is flat at the optimum and lets the query term win.
   The xx term of the MMD sums rows before summing the row means, because a
   single f32 sum over 4096² entries came out at 0.13 instead of 0.0002.
+- **burn's Flex backend has one global RNG** (`static SEED` in
+  `burn-flex`), which `device.seed` resets and `Linear` initialization
+  draws from. Models initialized concurrently, as parallel tests are,
+  interleave their draws and lose reproducibility; that made
+  `algorithm_49_agrees_on_a_markovian_effect` fail about one run in four.
+  `model::seeded` holds a crate-wide lock across seeding and
+  initialization. Route every new network through it.
 - `λ` decays geometrically from 1 to 0.001 (Sec. 13.3.3.1), and the
   learning rate to a tenth. The bow graph's min/max land near the natural
   bounds [54/256, 166/256], which Ex. 13.6's M̂4 and M̂3 attain.

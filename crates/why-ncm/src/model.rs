@@ -1,7 +1,7 @@
 //! The G-constrained NCM: one MLP per variable (Def. 13.1.11, Eq. 13.141).
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use burn::module::Module;
 use burn::nn::{Linear, LinearConfig};
@@ -59,6 +59,18 @@ impl Spec {
     }
 }
 
+/// Serializes parameter initialization. burn's Flex backend keeps one
+/// global RNG, so two models initialized at once (say, by tests running in
+/// parallel) would interleave their draws and stop being reproducible.
+static INIT: Mutex<()> = Mutex::new(());
+
+/// Seeds the backend and runs `init` while no other model initializes.
+pub(crate) fn seeded<T>(device: &Device, seed: u64, init: impl FnOnce() -> T) -> T {
+    let _guard = INIT.lock().unwrap_or_else(PoisonError::into_inner);
+    device.seed(seed);
+    init()
+}
+
 /// A feedforward network with ReLU hidden layers and linear output.
 #[derive(Module, Debug)]
 pub(crate) struct Mlp {
@@ -66,7 +78,13 @@ pub(crate) struct Mlp {
 }
 
 impl Mlp {
-    fn new(input: usize, hidden: usize, depth: usize, output: usize, device: &Device) -> Self {
+    pub(crate) fn new(
+        input: usize,
+        hidden: usize,
+        depth: usize,
+        output: usize,
+        device: &Device,
+    ) -> Self {
         let mut sizes = vec![input.max(1)];
         sizes.extend(std::iter::repeat_n(hidden, depth));
         sizes.push(output);
@@ -87,6 +105,31 @@ impl Mlp {
         }
         x
     }
+}
+
+/// `φ_V` of `nets` on per-row inputs: `parents[i]` is `rows × |D_{P_i}|`
+/// and `noise` is `rows × (n_noises · noise_dim)`, every `Û_C` side by side.
+/// Unlike [`Ncm::logits_soft`] the noise is a tensor, so gradients reach
+/// whatever produced it (the ANCM's encoder).
+pub(crate) fn forward_rows(
+    spec: &Spec,
+    nets: &Nets,
+    var: usize,
+    parents: Vec<Tensor<2>>,
+    noise: &Tensor<2>,
+) -> Tensor<2> {
+    let rows = noise.dims()[0];
+    let d = spec.noise_dim;
+    let mut parts = parents;
+    for &k in &spec.noises[var] {
+        parts.push(noise.clone().narrow(1, k * d, d));
+    }
+    let input = if parts.is_empty() {
+        Tensor::<2>::zeros([rows, 1], &noise.device())
+    } else {
+        Tensor::cat(parts, 1)
+    };
+    nets.mlps[var].forward(input)
 }
 
 /// The trainable part: `φ_V` for each variable, in topological order.
@@ -184,18 +227,19 @@ impl Ncm {
             width,
         };
         let device = Device::flex().autodiff();
-        device.seed(config.seed);
-        let mlps = (0..spec.names.len())
-            .map(|v| {
-                Mlp::new(
-                    spec.input_dim(v),
-                    config.hidden,
-                    config.layers,
-                    spec.levels[v].len() + 1,
-                    &device,
-                )
-            })
-            .collect();
+        let mlps = seeded(&device, config.seed, || {
+            (0..spec.names.len())
+                .map(|v| {
+                    Mlp::new(
+                        spec.input_dim(v),
+                        config.hidden,
+                        config.layers,
+                        spec.levels[v].len() + 1,
+                        &device,
+                    )
+                })
+                .collect()
+        });
         Ok(Self {
             spec: Arc::new(spec),
             nets: Nets { mlps },
