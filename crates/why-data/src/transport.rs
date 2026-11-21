@@ -98,7 +98,7 @@ use crate::graph::dseparation::{Admg, DSepError, EdgeKind};
 mod adaptation;
 mod direct;
 mod estimand;
-mod invariance;
+pub(crate) mod invariance;
 mod partial;
 mod representation;
 mod score;

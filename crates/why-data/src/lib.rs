@@ -15,6 +15,8 @@ pub mod ascm;
 // Documented by its own `//!` header.
 pub mod crl;
 // Documented by its own `//!` header.
+pub mod discovery;
+// Documented by its own `//!` header.
 pub mod explain;
 // Documented by its own `//!` header.
 pub mod fairness;
