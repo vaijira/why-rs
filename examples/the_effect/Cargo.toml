@@ -19,8 +19,9 @@ name = "ols_lu"
 path = "examples/chapter4_describing_relationships/ols_lu.rs"
 
 [dependencies]
-burn = { git = "https://github.com/tracel-ai/burn", rev = "13340b9965c4d576f3d5ed5a5fd028b0d3d66ea9", features = [
-    "train",
+burn = { version = "0.22", features = [
+    "dataset",
+    "linalg",
     "ndarray",
     "wgpu",
 ] }
@@ -28,7 +29,7 @@ burn = { git = "https://github.com/tracel-ai/burn", rev = "13340b9965c4d576f3d5e
 # directly, which is what `causaldata` returns. The umbrella crate has no
 # feature of its own for it, so the flag is set on `burn-dataset` itself; cargo
 # unifies it with the copy `burn` already pulls in.
-burn-dataset = { git = "https://github.com/tracel-ai/burn", rev = "13340b9965c4d576f3d5ed5a5fd028b0d3d66ea9", default-features = false, features = [
+burn-dataset = { version = "0.22", default-features = false, features = [
     "dataframe",
 ] }
 
@@ -37,7 +38,7 @@ burn-dataset = { git = "https://github.com/tracel-ai/burn", rev = "13340b9965c4d
 # Note that this list does not decide what gets compiled: cargo unifies it with
 # what `causaldata` and `burn-dataset` ask for, and those already pull in csv,
 # lazy and the extra dtypes.
-polars = { version = "0.54", default-features = false }
+polars = { version = "0.55", default-features = false }
 # `DataframeDataset` reads a row through `Deserialize`, so the record type is a
 # derive away.
 serde = { version = "1.0", features = ["std", "derive"] }
@@ -47,7 +48,7 @@ serde = { version = "1.0", features = ["std", "derive"] }
 causaldata = { path = "../../../causaldata/Rust/causaldata", default-features = false }
 # OLS with the statsmodels summary statistics: t, p, F, AIC/BIC, and the
 # residual diagnostics. Stands in for `statsmodels.formula.api`.
-inferust = "0.2"
+inferust = "0.8"
 # Stands in for seaborn; the SVG backend needs no system font access.
 plotters = { version = "0.3", default-features = false, features = [
     "svg_backend",

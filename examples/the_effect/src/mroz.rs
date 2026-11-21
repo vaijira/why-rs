@@ -57,11 +57,41 @@ pub type MrozDataset = DataframeDataset<MarriedWoman>;
 /// `statsmodels` does the same implicitly by dropping the NaN.
 pub fn load() -> Result<MrozDataset, Box<dyn std::error::Error>> {
     // `load` has already mapped the yes/no columns to booleans, so `lfp` is a
-    // mask as it stands.
+    // mask as it stands. `causaldata` currently returns a Polars 0.54 frame
+    // while `burn-dataset` 0.22 expects Polars 0.55, so filter the rows and
+    // rebuild the columns in Polars 0.55.
     let df = mroz::load()?;
-    let keep = df.column("lfp")?.bool()? & &df.column("inc")?.f64()?.gt(0.0);
+    let lfp: Vec<bool> = df.column("lfp")?.bool()?.iter().flatten().collect();
+    let k5: Vec<i64> = df.column("k5")?.i64()?.into_no_null_iter().collect();
+    let k618: Vec<i64> = df.column("k618")?.i64()?.into_no_null_iter().collect();
+    let age: Vec<i64> = df.column("age")?.i64()?.into_no_null_iter().collect();
+    let wc: Vec<bool> = df.column("wc")?.bool()?.iter().flatten().collect();
+    let hc: Vec<bool> = df.column("hc")?.bool()?.iter().flatten().collect();
+    let lwg: Vec<f64> = df.column("lwg")?.f64()?.into_no_null_iter().collect();
+    let inc: Vec<f64> = df.column("inc")?.f64()?.into_no_null_iter().collect();
 
-    Ok(MrozDataset::new(df.filter(&keep)?)?)
+    let keep: Vec<usize> = (0..df.height())
+        .filter(|&i| lfp[i] && inc[i] > 0.0)
+        .collect();
+    let pick_bool = |src: &[bool]| -> Vec<bool> { keep.iter().map(|&i| src[i]).collect() };
+    let pick_i64 = |src: &[i64]| -> Vec<i64> { keep.iter().map(|&i| src[i]).collect() };
+    let pick_f64 = |src: &[f64]| -> Vec<f64> { keep.iter().map(|&i| src[i]).collect() };
+
+    let filtered = DataFrame::new(
+        keep.len(),
+        vec![
+            Column::new("lfp".into(), pick_bool(&lfp)),
+            Column::new("k5".into(), pick_i64(&k5)),
+            Column::new("k618".into(), pick_i64(&k618)),
+            Column::new("age".into(), pick_i64(&age)),
+            Column::new("wc".into(), pick_bool(&wc)),
+            Column::new("hc".into(), pick_bool(&hc)),
+            Column::new("lwg".into(), pick_f64(&lwg)),
+            Column::new("inc".into(), pick_f64(&inc)),
+        ],
+    )?;
+
+    Ok(MrozDataset::new(filtered)?)
 }
 
 /// Which of the two regressions from the chapter to fit. The outcome is `lwg`

@@ -113,7 +113,11 @@ fn fit(spec: Spec, items: &[MarriedWoman], device: &Device) {
     println!("=== lwg ~ {} ===\n", spec.regressors().join(" + "));
 
     let beta = lu_solve(a, c);
-    let coefficients = beta.clone().into_data().to_vec::<f32>().expect("f32 betas");
+    let coefficients = beta
+        .clone()
+        .into_data()
+        .try_to_vec::<f32>()
+        .expect("f32 betas");
 
     // Residual mean squared error at the solution.
     let residual = y - x.matmul(beta.reshape([k, 1]));

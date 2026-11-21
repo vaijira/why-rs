@@ -21,7 +21,6 @@ use std::path::Path;
 use causaldata::datasets::mroz;
 use inferust::regression::ols::Ols;
 use plotters::prelude::*;
-use polars::prelude::*;
 
 /// Where the two SVGs are written.
 const PLOT_DIR: &str = "plots";
@@ -42,9 +41,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let wc: Vec<bool> = df.column("wc")?.bool()?.iter().flatten().collect();
     let k5: Vec<f64> = df
         .column("k5")?
-        .cast(&DataType::Float64)?
-        .f64()?
+        .i64()?
         .into_no_null_iter()
+        .map(|v| v as f64)
         .collect();
 
     // Create unlogged earnings.
@@ -63,8 +62,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         .iter()
         .zip(&wc)
         .partition_map(|(e, college)| (*e, *college));
-    println!("   wc=false  n={:>3}  earn={:.6}", did_not.len(), mean(&did_not));
-    println!("   wc=true   n={:>3}  earn={:.6}", attended.len(), mean(&attended));
+    println!(
+        "   wc=false  n={:>3}  earn={:.6}",
+        did_not.len(),
+        mean(&did_not)
+    );
+    println!(
+        "   wc=true   n={:>3}  earn={:.6}",
+        attended.len(),
+        mean(&attended)
+    );
 
     // 3. Get the conditional mean by bins -- ten equal-width bins over `inc`,
     // the same partition `pd.cut(x, 10)` makes.
@@ -128,7 +135,9 @@ fn mean(xs: &[f64]) -> f64 {
 /// edge down by 0.1% of the range so the minimum falls inside the first
 /// (half-open) interval; this does the same.
 fn binned_means(xs: &[f64], ys: &[f64], bins: usize) -> Vec<(f64, f64, usize, f64)> {
-    let (min, max) = xs.iter().fold((f64::MAX, f64::MIN), |(lo, hi), v| (lo.min(*v), hi.max(*v)));
+    let (min, max) = xs
+        .iter()
+        .fold((f64::MAX, f64::MIN), |(lo, hi), v| (lo.min(*v), hi.max(*v)));
     let span = max - min;
     let lo = min - span * 0.001;
     let width = (max - lo) / bins as f64;
@@ -146,8 +155,17 @@ fn binned_means(xs: &[f64], ys: &[f64], bins: usize) -> Vec<(f64, f64, usize, f6
 
     (0..bins)
         .map(|i| {
-            let m = if counts[i] == 0 { f64::NAN } else { sums[i] / counts[i] as f64 };
-            (lo + width * i as f64, lo + width * (i + 1) as f64, counts[i], m)
+            let m = if counts[i] == 0 {
+                f64::NAN
+            } else {
+                sums[i] / counts[i] as f64
+            };
+            (
+                lo + width * i as f64,
+                lo + width * (i + 1) as f64,
+                counts[i],
+                m,
+            )
         })
         .collect()
 }
@@ -189,8 +207,11 @@ fn loess(xs: &[f64], ys: &[f64], frac: f64, it: usize) -> Vec<f64> {
             // times the robustness weight carried over from the last pass.
             let (mut sw, mut swx, mut swy, mut swxx, mut swxy) = (0.0, 0.0, 0.0, 0.0, 0.0);
             for j in lo..=hi {
-                let w = if d_max <= 0.0 { 1.0 } else { tricube((x[i] - x[j]).abs() / d_max) }
-                    * robustness[j];
+                let w = if d_max <= 0.0 {
+                    1.0
+                } else {
+                    tricube((x[i] - x[j]).abs() / d_max)
+                } * robustness[j];
                 if w <= 0.0 {
                     continue;
                 }
@@ -221,7 +242,11 @@ fn loess(xs: &[f64], ys: &[f64], frac: f64, it: usize) -> Vec<f64> {
         sorted.sort_by(f64::total_cmp);
         let mad = sorted[n / 2];
         for (r, w) in resid.iter_mut().zip(robustness.iter_mut()) {
-            *w = if mad <= 0.0 { 1.0 } else { bisquare(*r / (6.0 * mad)) };
+            *w = if mad <= 0.0 {
+                1.0
+            } else {
+                bisquare(*r / (6.0 * mad))
+            };
         }
     }
 
@@ -234,7 +259,11 @@ fn loess(xs: &[f64], ys: &[f64], frac: f64, it: usize) -> Vec<f64> {
 }
 
 fn tricube(u: f64) -> f64 {
-    if u >= 1.0 { 0.0 } else { (1.0 - u.powi(3)).powi(3) }
+    if u >= 1.0 {
+        0.0
+    } else {
+        (1.0 - u.powi(3)).powi(3)
+    }
 }
 
 fn bisquare(u: f64) -> f64 {
@@ -364,7 +393,11 @@ trait PartitionMap<T>: Iterator {
         let (mut yes, mut no) = (Vec::new(), Vec::new());
         for item in self {
             let (value, flag) = f(item);
-            if flag { yes.push(value) } else { no.push(value) }
+            if flag {
+                yes.push(value)
+            } else {
+                no.push(value)
+            }
         }
         (yes, no)
     }
