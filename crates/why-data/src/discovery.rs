@@ -1,4 +1,5 @@
-//! Structural learning: chapter 16, "Structural Learning".
+//! Structural learning: chapters 16, "Structural Learning", and 17,
+//! "Multi-Domain Structural Learning".
 //!
 //! Learning a causal diagram from data can only reach an equivalence class:
 //! every diagram that implies the same constraints fits the data equally
@@ -19,6 +20,8 @@
 //! | [`i_markov_equivalent`], [`psi_markov_equivalent`] | Thms 16.2.6 and 16.2.8 |
 //! | [`i_fci`] | Algorithms 56-58 (I-FCI, known targets), with R11 and R12 |
 //! | [`psi_fci`], [`psi_pc`] | Algorithm 59 (Ψ-FCI) and Algorithm 60 (Ψ-PC), unknown targets |
+//! | [`augment_selection`], [`md_markov_equivalent`] | chapter 17: augmented selection diagrams (Def. 17.2.4), MD-Markov equivalence (Thm 17.2.5) |
+//! | [`md_pc`], [`md_fci`] | Algorithms 61 and 64 (MD-PC, MD-FCI), with Algorithms 62-63; [`SelectionOracle`] answers by Prop. 17.2.4 |
 //! | [`Independence`], [`Invariance`] | the constraint tests the learners ask: [`GraphOracle`] and [`AugmentedOracle`] answer from a diagram, [`DataTests`] from data |
 //!
 //! The learners take any [`Independence`] (FCI) or [`Invariance`] (I-FCI,
@@ -55,6 +58,7 @@ use crate::graph::dseparation::DSepError;
 mod fci;
 mod interventional;
 mod mag;
+mod multidomain;
 mod oracle;
 mod pag;
 #[cfg(test)]
@@ -65,6 +69,9 @@ pub use interventional::{
     FNode, augment, i_fci, i_markov_equivalent, psi_fci, psi_markov_equivalent, psi_pc,
 };
 pub use mag::{mag, markov_equivalent};
+pub use multidomain::{
+    Regime, SNode, SelectionOracle, augment_selection, md_fci, md_markov_equivalent, md_pc,
+};
 pub use oracle::{AugmentedOracle, DataTests, GraphOracle, Independence, Invariance};
 pub use pag::{Mark, Pag};
 

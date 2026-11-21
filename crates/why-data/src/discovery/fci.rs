@@ -1,7 +1,7 @@
 //! The FCI engine (Algorithm 54) shared by FCI, I-FCI and Ψ-FCI, and the
 //! PC-style orientation of Ψ-PC.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::mag::discriminating_paths;
 use super::{DiscoveryError, Independence, Mark, Pag};
@@ -32,10 +32,17 @@ pub(crate) fn subsets(items: &[usize]) -> Vec<Vec<usize>> {
     out
 }
 
+/// A separating set the skeleton callback returns for an edge removed
+/// without a known separating set (by background knowledge). Phase II and
+/// R4 leave such pairs alone.
+pub(crate) const UNKNOWN_SEPSET: usize = usize::MAX;
+
 /// The state of a constraint-based learner after Phase I.
 pub(crate) struct Engine {
     pub pag: Pag,
     sepsets: HashMap<(usize, usize), Vec<usize>>,
+    /// Pairs removed without a known separating set.
+    unknown: HashSet<(usize, usize)>,
     /// F-nodes and the symmetric difference each stands for (`None` when
     /// unknown, as in Ψ-FCI).
     fnodes: Vec<(usize, Option<Vec<usize>>)>,
@@ -54,21 +61,34 @@ impl Engine {
     ) -> Result<Self, DiscoveryError> {
         let mut pag = Pag::complete(names);
         let mut sepsets = HashMap::new();
+        let mut unknown = HashSet::new();
         for i in 0..names.len() {
             for j in i + 1..names.len() {
                 if let Some(s) = separate(i, j)? {
                     pag.remove(i, j);
-                    sepsets.insert((i, j), s.clone());
-                    sepsets.insert((j, i), s);
+                    if s == [UNKNOWN_SEPSET] {
+                        unknown.insert((i, j));
+                        unknown.insert((j, i));
+                    } else {
+                        sepsets.insert((i, j), s.clone());
+                        sepsets.insert((j, i), s);
+                    }
                 }
             }
         }
         Ok(Self {
             pag,
             sepsets,
+            unknown,
             fnodes,
             r12,
         })
+    }
+
+    /// Non-adjacent with a known separating set: only then does an
+    /// unshielded triple certify a non-collider.
+    fn apart(&self, x: usize, y: usize) -> bool {
+        !self.pag.adj(x, y) && !self.unknown.contains(&(x, y))
     }
 
     fn in_sepset(&self, x: usize, y: usize, z: usize) -> bool {
@@ -93,7 +113,10 @@ impl Engine {
             let nb: Vec<usize> = self.pag.neighbors(z).collect();
             for (a, &x) in nb.iter().enumerate() {
                 for &y in &nb[a + 1..] {
-                    if !self.pag.adj(x, y) && !self.in_sepset(x, y, z) {
+                    if !self.pag.adj(x, y)
+                        && !self.unknown.contains(&(x, y))
+                        && !self.in_sepset(x, y, z)
+                    {
                         self.orient(x, z, Mark::Arrow);
                         self.orient(y, z, Mark::Arrow);
                     }
@@ -157,7 +180,7 @@ impl Engine {
                     continue;
                 }
                 for c in self.pag.neighbors(b).collect::<Vec<_>>() {
-                    if c != a && !self.pag.adj(a, c) && self.pag.at(c, b) == Some(Mark::Circle) {
+                    if c != a && self.apart(a, c) && self.pag.at(c, b) == Some(Mark::Circle) {
                         changed |= self.orient(c, b, Mark::Tail);
                         changed |= self.orient(b, c, Mark::Arrow);
                     }
@@ -200,7 +223,7 @@ impl Engine {
                 .collect();
             for (k, &a) in into.iter().enumerate() {
                 for &c in &into[k + 1..] {
-                    if self.pag.adj(a, c) {
+                    if !self.apart(a, c) {
                         continue;
                     }
                     for d in self.pag.neighbors(b).collect::<Vec<_>>() {
@@ -229,7 +252,10 @@ impl Engine {
                 if self.pag.at(c, b) != Some(Mark::Circle) {
                     continue;
                 }
-                if let Some(path) = discriminating_paths(&self.pag, b, c).into_iter().next() {
+                if let Some(path) = discriminating_paths(&self.pag, b, c)
+                    .into_iter()
+                    .find(|p| !self.unknown.contains(&(p[0], c)))
+                {
                     let w = path[0];
                     let a = path[path.len() - 3];
                     if self.in_sepset(w, c, b) {
@@ -298,7 +324,7 @@ impl Engine {
                 continue;
             }
             // Uncovered: the node two back is not adjacent to v.
-            if path.len() >= 2 && self.pag.adj(path[path.len() - 2], v) {
+            if path.len() >= 2 && !self.apart(path[path.len() - 2], v) {
                 continue;
             }
             if v == target {
@@ -322,7 +348,7 @@ impl Engine {
                 }
                 // R9: an uncovered p.d. path a, b, …, c with b not adjacent to c.
                 let r9 = self.pag.neighbors(a).any(|b| {
-                    b != c && !self.pag.adj(b, c) && self.pd(a, b) && {
+                    b != c && self.apart(b, c) && self.pd(a, b) && {
                         let mut path = vec![a, b];
                         let mut out = Vec::new();
                         self.updp(c, usize::MAX, &mut path, &mut out);
@@ -347,7 +373,7 @@ impl Engine {
                         let omega = self.updp_seconds(a, d, c);
                         for &m in &mu {
                             for &w in &omega {
-                                if m != w && !self.pag.adj(m, w) {
+                                if m != w && self.apart(m, w) {
                                     r10 = true;
                                     break 'outer;
                                 }
@@ -391,7 +417,7 @@ impl Engine {
                     let r1 = self
                         .pag
                         .neighbors(b)
-                        .any(|a| a != c && self.pag.directed(a, b) && !self.pag.adj(a, c));
+                        .any(|a| a != c && self.pag.directed(a, b) && self.apart(a, c));
                     // R2: b → a → c with b o-o c.
                     let r2 = self
                         .pag
@@ -409,7 +435,7 @@ impl Engine {
                     let r3 = both
                         .iter()
                         .enumerate()
-                        .any(|(k, &x)| both[k + 1..].iter().any(|&y| !self.pag.adj(x, y)));
+                        .any(|(k, &x)| both[k + 1..].iter().any(|&y| self.apart(x, y)));
                     if r1 || r2 || r3 {
                         self.pag.set(b, c, Mark::Tail, Mark::Arrow);
                         changed = true;

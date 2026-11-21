@@ -499,3 +499,193 @@ fn fci_from_samples_with_g_tests() {
     let pag = fci(&names, &mut DataTests::g_test(&[&data], 0.01)).unwrap();
     assert_eq!(pag, fci(&names, &mut GraphOracle::new(fig_16_5())).unwrap());
 }
+
+// ---------------------------------------------------------------------------
+// Chapter 17: multiple domains.
+
+/// Fig. 17.4(a): X -> Y -> Z, the domains differing at X.
+fn fig_17_4() -> Admg {
+    graph(&[("X", "Y"), ("Y", "Z")], &[])
+}
+
+const S_X: [(usize, usize, &[&str]); 1] = [(0, 1, &["X"])];
+
+#[test]
+fn examples_17_12_to_17_15_augmented_selection_diagrams() {
+    let children = |f: &[FNode]| -> Vec<String> { f.iter().map(|n| n.targets.join("")).collect() };
+    // Ex. 17.12: observations in both domains add nothing.
+    let (_, f, s) =
+        augment_selection(&fig_17_4(), &S_X, &[(0, &[], true), (1, &[], true)]).unwrap();
+    assert!(f.is_empty());
+    assert_eq!(s[0].targets, ["X"]);
+    // Ex. 17.13: ⟨{}¹, {Y}²⟩.
+    let (_, f, s) =
+        augment_selection(&fig_17_4(), &S_X, &[(0, &[], true), (1, &["Y"], true)]).unwrap();
+    assert_eq!(children(&f), ["Y"]);
+    assert_eq!(s[0].targets, ["X", "Y"]);
+    // Ex. 17.14: ⟨{Z}¹, {Y}²⟩.
+    let (_, f, s) =
+        augment_selection(&fig_17_4(), &S_X, &[(0, &["Z"], true), (1, &["Y"], true)]).unwrap();
+    assert_eq!(children(&f), ["YZ"]);
+    assert_eq!(s[0].targets, ["X", "Y", "Z"]);
+    // Ex. 17.15: ⟨{}¹, {Y}², {Z}²⟩: three F-nodes, no extra S-node edges.
+    let setup: [Regime<'_>; 3] = [(0, &[], true), (1, &["Y"], true), (1, &["Z"], true)];
+    let (_, f, s) = augment_selection(&fig_17_4(), &S_X, &setup).unwrap();
+    assert_eq!(children(&f), ["Y", "Z", "YZ"]);
+    assert_eq!(s[0].targets, ["X"]);
+    // A domain without data is rejected.
+    assert!(augment_selection(&fig_17_4(), &S_X, &[(1, &[], true)]).is_err());
+}
+
+#[test]
+fn examples_17_16_17_and_17_20_invariances_and_equivalence() {
+    // Fig. 17.5(a), reconstructed: X -> Y -> Z, the domains differing at Y.
+    let g = graph(&[("X", "Y"), ("Y", "Z")], &[]);
+    let s: [(usize, usize, &[&str]); 1] = [(0, 1, &["Y"])];
+    let setup: [Regime<'_>; 3] = [(0, &[], true), (0, &["Z"], true), (1, &[], true)];
+    let mut oracle = SelectionOracle::new(g.clone(), &s, &setup).unwrap();
+    // Ex. 17.16: P¹(Y) = P¹_Z(Y).
+    assert!(oracle.invariant(0, 1, "Y", &[]).unwrap());
+    // Ex. 17.17: P¹_Z(Y | X, Z) = P²(Y | X, Z) is not implied.
+    assert!(!oracle.invariant(1, 2, "Y", &["X", "Z"]).unwrap());
+    // Ex. 17.20: dropping S12 -> Y changes the class.
+    assert!(md_markov_equivalent(&g, &s, &setup, &g, &s, &setup).unwrap());
+    let none: [(usize, usize, &[&str]); 0] = [];
+    assert!(!md_markov_equivalent(&g, &s, &setup, &g, &none, &setup).unwrap());
+}
+
+/// Thm 17.4.1: with observations alone, the MD-Markov invariances of two
+/// domains are the Ψ-Markov invariances of interventions on the S-node's
+/// children.
+#[test]
+fn theorem_17_4_1_domains_as_interventions() {
+    for seed in 0..30u64 {
+        let g = random_graph(splitmix(seed ^ 0x17), false);
+        let children: Vec<&str> = NAMES
+            .iter()
+            .copied()
+            .filter(|_| false)
+            .chain(random_targets(seed)[1].iter().copied())
+            .collect();
+        let s: [(usize, usize, &[&str]); 1] = [(0, 1, &children)];
+        let mut md =
+            SelectionOracle::new(g.clone(), &s, &[(0, &[], true), (1, &[], true)]).unwrap();
+        let mut psi = AugmentedOracle::new(g.clone(), &[&[], &children]).unwrap();
+        for y in NAMES {
+            let rest: Vec<usize> = (0..5).filter(|k| NAMES[*k] != y).collect();
+            for w in fci::subsets(&rest) {
+                let ws: Vec<&str> = w.iter().map(|&k| NAMES[k]).collect();
+                assert_eq!(
+                    md.invariant(0, 1, y, &ws).unwrap(),
+                    psi.invariant(0, 1, y, &ws).unwrap(),
+                    "seed {seed}: {y} | {ws:?}"
+                );
+            }
+        }
+    }
+}
+
+/// Ex. 17.27 (Fig. 17.11): pooling the domains' observations (MDIX) makes
+/// I-FCI orient Y -> X, which is false; MD-FCI learns X -> Y.
+#[test]
+fn example_17_27_pooling_domains_is_unsound() {
+    let model = |p_x: f64| {
+        Model::new(
+            [
+                eq("X", v("UX")),
+                eq("Y", expr::or([expr::and([v("X"), v("UY1")]), v("UY2")])),
+            ],
+            [bern("UX", p_x), bern("UY1", 0.7), bern("UY2", 0.2)],
+        )
+        .unwrap()
+    };
+    let names = ["X", "Y"];
+    let m1 = model(0.3);
+    let mut m1y = model(0.3);
+    let soft = m1y
+        .intervene_with(&[(
+            "Y",
+            expr::or([expr::and([v("X"), v("UY1")]), expr::not(v("UY2"))]),
+        )])
+        .unwrap();
+    let m2 = model(0.7);
+    let p1 = table(&m1, m1.observational(), &names);
+    let p1y = table(&m1y, soft, &names);
+    let p2 = table(&m2, m2.observational(), &names);
+    // The pooled observational data: half from each domain.
+    let rows: Vec<Vec<String>> = [&p1, &p2]
+        .iter()
+        .flat_map(|d| {
+            (0..d.len()).map(|r| {
+                names
+                    .iter()
+                    .map(|n| d.value(n, r).unwrap().to_string())
+                    .collect::<Vec<_>>()
+            })
+        })
+        .collect();
+    let weights: Vec<f64> = [&p1, &p2]
+        .iter()
+        .flat_map(|d| d.weights().unwrap().iter().map(|w| w / 2.0))
+        .collect();
+    let pooled = Dataset::from_records(names, rows)
+        .unwrap()
+        .with_weights(weights)
+        .unwrap();
+
+    let wrong = i_fci(
+        &names,
+        &[&[], &["Y"]],
+        &mut DataTests::exact(&[&pooled, &p1y], 1e-9),
+    )
+    .unwrap();
+    assert_eq!(
+        wrong.edge("X", "Y").unwrap(),
+        Some((Mark::Arrow, Mark::Tail))
+    );
+
+    let setup: [Regime<'_>; 3] = [(0, &[], true), (0, &["Y"], true), (1, &[], true)];
+    let right = md_fci(
+        &names,
+        &setup,
+        &mut DataTests::exact(&[&p1, &p1y, &p2], 1e-9),
+    )
+    .unwrap();
+    assert_eq!(
+        right.edge("X", "Y").unwrap(),
+        Some((Mark::Tail, Mark::Arrow))
+    );
+    assert_eq!(
+        right.edge("S12", "X").unwrap(),
+        Some((Mark::Tail, Mark::Arrow))
+    );
+    assert_eq!(right.edge("S12", "Y").unwrap(), None);
+}
+
+/// Random selection diagrams and regimes: MD-FCI and MD-PC are sound for
+/// the graphs they learn (see `md_fci`, `md_pc`).
+#[test]
+fn md_fci_and_md_pc_are_sound_on_random_selection_diagrams() {
+    for seed in 0..120u64 {
+        for markovian in [false, true] {
+            let g = random_graph(splitmix(seed ^ 0x170 ^ u64::from(markovian)), markovian);
+            let targets = random_targets(seed);
+            let s_children = random_targets(seed ^ 0x55)[1].clone();
+            let s: [(usize, usize, &[&str]); 1] = [(0, 1, &s_children)];
+            let second: &[&str] = if seed % 3 == 0 { &[] } else { &targets[1] };
+            let setup: Vec<Regime<'_>> = vec![
+                (0, &[], true),
+                (0, &targets[targets.len() - 1], seed % 4 != 1),
+                (1, second, true),
+            ];
+            let mut oracle = SelectionOracle::new(g.clone(), &s, &setup).unwrap();
+            let truth = multidomain::learning_target(&g, &s, &setup, markovian).unwrap();
+            let learned = if markovian {
+                md_pc(&NAMES, &setup, &mut oracle).unwrap()
+            } else {
+                md_fci(&NAMES, &setup, &mut oracle).unwrap()
+            };
+            assert_sound(&learned, &mag(&truth, &truth.variables()).unwrap());
+        }
+    }
+}

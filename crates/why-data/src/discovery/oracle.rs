@@ -267,12 +267,7 @@ fn decide(rows: &[Row], mode: Mode) -> bool {
     }
 }
 
-fn rows_of(
-    d: &Dataset,
-    x: &str,
-    y: &str,
-    z: &[&str],
-) -> Result<Vec<Row>, DiscoveryError> {
+fn rows_of(d: &Dataset, x: &str, y: &str, z: &[&str]) -> Result<Vec<Row>, DiscoveryError> {
     (0..d.len())
         .map(|r| {
             Ok((
