@@ -339,3 +339,62 @@ fn algorithm_50_is_ctf_consistent() {
     assert!(read >= 190, "the labeller reads only {read} of 200");
     assert!(kept >= 190, "only {kept} of 200 edits keep the gender");
 }
+
+/// Algorithm 52 on Exs. 15.9 and 15.10, from the low-level table of
+/// Fig. 15.11(a).
+#[test]
+fn algorithm_52_decides_abstract_identification() {
+    use why_data::abstraction::Abstraction;
+
+    let rows: Vec<Vec<String>> = (0..16)
+        .map(|k: usize| (0..4).map(|i| ((k >> (3 - i)) & 1).to_string()).collect())
+        .collect();
+    let weights = vec![
+        0.288, 0.032, 0.072, 0.008, 0.072, 0.008, 0.018, 0.002, // R = 0
+        0.072, 0.008, 0.018, 0.002, 0.072, 0.008, 0.032, 0.288, // R = 1
+    ];
+    let low = Dataset::from_records(["R", "A", "B", "Y"], rows)
+        .unwrap()
+        .with_weights(weights)
+        .unwrap();
+    let g = graph(
+        &[("R", "A"), ("R", "B"), ("A", "B"), ("A", "Y"), ("B", "Y")],
+        &[("R", "Y")],
+    );
+    let both = |v: &[&str]| if v == ["1", "1"] { "1" } else { "0" }.to_string();
+    for with_r in [false, true] {
+        // The identifiable case needs the gap below τ = 0.05: at 1500
+        // epochs the max model still sits at 0.55, at 3000 it is 0.52.
+        let config = NcmConfig {
+            epochs: if with_r { 3000 } else { 1000 },
+            ..NcmConfig::default()
+        };
+        let mut tau = Abstraction::new()
+            .cluster("X", &["A", "B"], both)
+            .unwrap()
+            .keep("Y")
+            .unwrap();
+        if with_r {
+            tau = tau.keep("R").unwrap();
+        }
+        let gc = tau.cdag(&g).unwrap();
+        let objective = Objective::new(q(&gc, "P(y_x)"), &[("X", "1"), ("Y", "1")]);
+        let r = neural_abstract_id(
+            &g,
+            &tau,
+            &objective,
+            &[Experiment::observational(low.clone())],
+            &config,
+        )
+        .unwrap();
+        if with_r {
+            // Ex. 15.10: τ-ID, and the truth is 0.5.
+            assert!(r.identifiable, "[{}, {}]", r.min, r.max);
+            assert!((r.estimate.unwrap() - 0.5).abs() < 0.05, "{:?}", r.estimate);
+        } else {
+            // Ex. 15.9: not τ-ID; M1 and M2 sit at the bounds [0.29, 0.95].
+            assert!(!r.identifiable);
+            assert!(r.min < 0.4 && r.max > 0.85, "[{}, {}]", r.min, r.max);
+        }
+    }
+}

@@ -14,6 +14,7 @@
 //! | [`neural_id`] | Algorithm 44 (`L2` query from `P(V)`) and Algorithm 46 (NeuralID), training as Algorithm 47 ([`Kind::Explicit`]) or Algorithm 49 ([`Kind::Implicit`]) |
 //! | [`symbolic_then_neural`] | Algorithm 45: decide with C-INFER, estimate with an NCM |
 //! | [`Ncm::distribution`] | the fitted `P̂(V)` |
+//! | [`neural_abstract_id`] | Algorithm 52 (chapter 15): NeuralID on the cluster causal diagram and the data mapped through `τ` |
 //! | [`ancm`], [`Ancm`] | Algorithm 50 (chapter 14): a G-NCM that generates labelled images, trained as a VAE; samples and edits of `P̂(I, I_{x′})` |
 //!
 //! # The two implementations
@@ -87,6 +88,7 @@ use std::fmt;
 use why_data::fairness::Dataset;
 use why_data::ncm::NcmError as StructureError;
 
+mod abstraction;
 mod ancm;
 mod data;
 mod explicit;
@@ -96,6 +98,7 @@ mod model;
 #[cfg(test)]
 mod tests;
 
+pub use abstraction::neural_abstract_id;
 pub use ancm::{Ancm, AncmConfig, Edit, ImageData, ancm};
 pub use identify::{NeuralIdResult, Objective, fit, neural_id, symbolic_then_neural};
 pub use model::Ncm;
@@ -126,6 +129,8 @@ pub enum NcmError {
     TooLarge(usize),
     /// Images that do not match their labels or one another.
     BadImages(String),
+    /// The abstraction is malformed for the graph or the data (chapter 15).
+    Abstraction(why_data::abstraction::AbstractionError),
 }
 
 impl From<StructureError> for NcmError {
@@ -156,6 +161,7 @@ impl fmt::Display for NcmError {
             Self::ImpossibleCondition => f.write_str("the conditioning event has probability zero"),
             Self::TooLarge(n) => write!(f, "the query needs more than {n} cells"),
             Self::BadImages(s) => write!(f, "bad images: {s}"),
+            Self::Abstraction(e) => e.fmt(f),
         }
     }
 }

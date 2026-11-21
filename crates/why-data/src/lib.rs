@@ -9,6 +9,8 @@
 //! Causal data structures.
 
 // Documented by its own `//!` header.
+pub mod abstraction;
+// Documented by its own `//!` header.
 pub mod ascm;
 // Documented by its own `//!` header.
 pub mod crl;

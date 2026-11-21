@@ -20,3 +20,7 @@ name = "chapter13_ncm"
 # Algorithm 50 on rendered images.
 [[example]]
 name = "chapter14_images"
+
+# Chapter 15: abstractions, Algorithms 51 and 52, and the nutrition study.
+[[example]]
+name = "chapter15_abstractions"
