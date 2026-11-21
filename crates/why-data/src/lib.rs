@@ -19,5 +19,7 @@ pub mod graph;
 // Documented by its own `//!` header, which is where the intra-doc links
 // resolve from; an outer `///` here would shadow it and break them.
 pub mod scm;
+// Documented by its own `//!` header.
+pub mod transport;
 /// Different useful types
 pub mod types;

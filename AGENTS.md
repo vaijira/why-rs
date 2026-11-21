@@ -11,7 +11,7 @@ only, no `[package]`. Every crate lives under [crates/](crates/).
 
 | Crate | Role |
 | --- | --- |
-| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-calculus, σ-calculus, ID, C-INFER, symbolic SCMs, causal fairness and explanations (chapter 6: Algorithms 15–18, L3 Shapley values), causal RL (chapter 8: CDMs, NUC/SBC, IPW/DP, Algorithms 19–21; chapter 9: causal bounds, POMIS, counterfactual policies, causal imitation, causal games, Algorithms 22–31) |
+| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-calculus, σ-calculus, ID, C-INFER, symbolic SCMs, causal fairness and explanations (chapter 6: Algorithms 15–18, L3 Shapley values), causal RL (chapter 8: CDMs, NUC/SBC, IPW/DP, Algorithms 19–21; chapter 9: causal bounds, POMIS, counterfactual policies, causal imitation, causal games, Algorithms 22–31), statistical transportability (chapter 11: Algorithms 32–38) |
 | [crates/why-parser/](crates/why-parser/) | Parsers: dagitty (pest) and the book's section format (`<NODES>`, `<EDGES>`, `<TASK>`, `<QUERY>`, `<INTERVENTIONS>`) |
 | [crates/why-ui/](crates/why-ui/) | `cdylib`+`rlib` WASM front end built with `dominator` |
 
@@ -91,14 +91,16 @@ cargo run -p why-data --example chapter6_decisions  # Task 3, checks the book's 
 cargo run -p why-data --example chapter6_explanations  # §6.2: SHAP vs do-Shapley vs L3, Ex. 6.37–6.43
 cargo run -p why-data --example chapter8_crl  # Ex. 8.6, 8.16–8.18, 8.23–8.25, RCT vs UCB
 cargo run -p why-data --example chapter9_crl  # Tables 9.2–9.3, 9.6–9.7, 9.15; UCB+, Ctf-UCB, CNE
+cargo run -p why-data --example chapter11_transport  # Exs. 11.5–11.34, Algs. 32–37
 cargo run -p why-parser --example notebook_graphs  # the book's file format
 ```
 
 The root is a virtual manifest, so these cover all members by default — no
-`--workspace` needed. As of the last verified run the workspace has 223 tests
-(179 in `why-data` plus 21 doctests, 21 in `why-parser` plus 2 doctests), all
-passing, and clippy is clean workspace-wide (the warnings this file used to
-record were fixed in f9aee15). The tree is not rustfmt-clean, so do not run
+`--workspace` needed. As of the last verified run the workspace has 249 tests
+(200 in `why-data` plus 26 doctests, 21 in `why-parser` plus 2 doctests), all
+passing. Clippy 1.100 reports one lint, `needless_range_loop` in
+`fairness/estimate.rs`, which older toolchains did not flag; the warnings this
+file used to record were fixed in f9aee15. The tree is not rustfmt-clean, so do not run
 `cargo fmt` over it as part of an unrelated change.
 
 `why-data` has no Cargo features, and no `RUSTFLAGS` or `.cargo/config.toml` are
@@ -315,6 +317,57 @@ Facts that are easy to get wrong:
 Not implemented: mixed policies with context (Sec. 9.3.2), hybrid policies
 under an autonomy budget (Sec. 9.4.3), Causal GAIL (Prop. 9.5.6) and
 Secs. 9.6.5–9.6.6.
+
+### Transportability (chapter 11)
+
+[crates/why-data/src/transport.rs](crates/why-data/src/transport.rs)
+implements chapter 11, layer-1 generalization across domains. It adds no
+dependency and builds for WASM. A `SelectionDiagram` is an `Admg` plus one
+discrepancy set `Δ^{k,*}` per source. Its S-nodes are implicit;
+`augmented()` materialises them as `S_<source>`. Estimands are
+`transport::Estimand`, not `Formula`, because each factor names its domain
+(`P^1(y | x)`, `P^*(z)`). `Estimand::evaluate` runs on any `Distributions`.
+`EmpiricalDistributions` (one `fairness::Dataset` per domain) is the plug-in
+estimator.
+
+| File | Book |
+| --- | --- |
+| `direct.rs` | Thm 11.2.1, `list_dtr_dist` (Alg. 32), structural covariate shift (Def. 11.2.3) |
+| `score.rs` | `score_tr` (Alg. 33), `transportable_feature_sets` (maximal sets, Def. 11.2.5) |
+| `partial.rs` | Thms 11.3.1–11.3.3, `statistical_transport` (Thm 11.3.4) |
+| `representation.rs` | determined/constrained/free features (Def. 11.2.8); `SelectionDiagram::augment` is Def. 11.2.9 |
+| `invariance.rs` | CMS (Assumption 11.2.12), source invariance with a χ² test (Def. 11.2.11) |
+| `adaptation.rs` | Algs. 34–38: structure-informed/agnostic DA, multi-cause, sequential |
+
+Facts that are easy to get wrong:
+
+- **Thm 11.3.4's `pa⁺` must be Tian's set.** `pa⁺` should be
+  `Pa(T_i) \ {V_i}`, which adds the parents of the earlier members of the
+  c-component. The printed Eq. 11.241 is constant in `x2` while the truth is
+  not; `example_11_34_needs_tians_conditioning_set` shows it.
+- **Score-TR gets each c-factor from ID**, on the latent projection onto
+  `W ∪ Z̃`. Line 11 of Alg. 33 is only the Markovian formula. Without the
+  projection, ID mentions ancestors of `Z̃` that nothing sums out. Line 16's
+  denominator sums over `W \ (Z \ Z̃)`, not `W \ {y}`.
+- **ID primes captured indices (`v0'`)**, and `Estimand::evaluate` reads a
+  primed name as its unprimed variable. Keep that if you touch either.
+- `score_tr_and_the_product_agree_and_are_sound` runs Score-TR and Thm 11.3.4
+  with `W = ∅` over 150 random multi-domain models. Both claim completeness,
+  so they must decide the same queries, and every estimand must equal the
+  true `P*(y | z)`. `the_product_is_sound_and_subsumes_the_scenarios` adds
+  random target measurements. Run both after touching `score.rs`,
+  `partial.rs` or `estimand.rs`.
+- Book errata: Ex. 11.30 misses `Z = {Z, R}`, so Thm 11.3.3 does apply.
+  Ex. 11.4's 3/8 is a joint; the conditional is 3/4. Ex. 11.40's equations
+  contradict each other. Figs. 11.12–11.15, 11.20, 11.33 and 11.34 have no
+  edge lists, so the tests reconstruct them from the text. The Fig. 11.13
+  reconstruction matches Ex. 11.12's four maximal sets but has 25
+  transportable sets, not Fig. 11.14's 15.
+
+Not implemented: Alg. 39 (enumerates every partition of positions and every
+set of graphs), the optimisation approach of Sec. 11.4.4, and learning
+representations by UIRM (Def. 11.2.13). There is no chapter 11 code in the
+book's companion Python.
 
 ### σ-calculus
 

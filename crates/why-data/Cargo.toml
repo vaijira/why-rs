@@ -51,6 +51,10 @@ name = "chapter8_crl"
 [[example]]
 name = "chapter9_crl"
 
+# Chapter 11 has no notebook; this checks the book's worked examples.
+[[example]]
+name = "chapter11_transport"
+
 # WASM-only opt-ins. `rssn` reaches three generations of `rand`, and each
 # `getrandom` behind them refuses to build for wasm32-unknown-unknown until a
 # source of randomness is named; `uuid` does the same. Cargo features are
