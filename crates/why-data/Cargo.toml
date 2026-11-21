@@ -67,6 +67,10 @@ name = "chapter17_multidomain"
 [[example]]
 name = "chapter18_representation"
 
+# Chapter 19: linear identification criteria and M-ID.
+[[example]]
+name = "chapter19_parametric"
+
 # WASM-only opt-ins. `rssn` reaches three generations of `rand`, and each
 # `getrandom` behind them refuses to build for wasm32-unknown-unknown until a
 # source of randomness is named; `uuid` does the same. Cargo features are

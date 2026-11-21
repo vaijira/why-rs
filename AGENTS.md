@@ -13,7 +13,7 @@ lives under [crates/](crates/).
 
 | Crate | Role |
 | --- | --- |
-| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-/σ-calculus, ID, C-INFER, symbolic SCMs, and the book's chapters 6, 8, 9, 11, 12, 14-18 and the tensor-free part of 13 |
+| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-/σ-calculus, ID, C-INFER, symbolic SCMs, and the book's chapters 6, 8, 9, 11, 12, 14-19 and the tensor-free part of 13 |
 | [crates/why-ncm/](crates/why-ncm/) | Neural causal models trained with `burn` (chapter 13), the ANCM image generator (chapter 14) and NeuralAbstractID (chapter 15). A separate crate so `burn` stays out of the `why-ui` bundle |
 | [crates/why-parser/](crates/why-parser/) | Parsers: dagitty (pest) and the book's section format (`<NODES>`, `<EDGES>`, `<TASK>`, `<QUERY>`, `<INTERVENTIONS>`) |
 | [crates/why-ui/](crates/why-ui/) | `cdylib`+`rlib` WASM front end built with `dominator` |
@@ -42,6 +42,7 @@ static assets (`index.html`, images) live in
 | `discovery` (chapter 16) | [discovery-chapter16.md](docs/agents/discovery-chapter16.md) |
 | `discovery::md_*`, selection diagrams (chapter 17) | [multidomain-chapter17.md](docs/agents/multidomain-chapter17.md) |
 | `representation` (chapter 18) | [representation-chapter18.md](docs/agents/representation-chapter18.md) |
+| `parametric` (chapter 19) | [parametric-chapter19.md](docs/agents/parametric-chapter19.md) |
 | `scm`, `rssn`, WASM builds | [rssn-wasm.md](docs/agents/rssn-wasm.md) |
 
 Each file lists the deliberate departures from the book, the errata found, and
@@ -122,6 +123,7 @@ cargo run -p why-data --example chapter12_generalize  # Exs. 12.1–12.20, Algs.
 cargo run -p why-data --example chapter16_discovery  # Exs. 16.4–16.24, Algs. 53–59, FCI on samples
 cargo run -p why-data --example chapter17_multidomain  # Exs. 17.12–17.27, MD-PC, MD-FCI
 cargo run -p why-data --example chapter18_representation  # Exs. 18.14–18.38, CRID, Sec. 18.6 settings
+cargo run -p why-data --example chapter19_parametric  # Exs. 19.16–19.28 linear criteria, LATE, Sec. 19.7.6.2 M-ID
 cargo run -p why-ncm --example chapter13_ncm  # Exs. 13.6–13.16, Algs. 44–49 (trains; ~1 min)
 cargo run -p why-ncm --example chapter14_images  # Exs. 14.2–14.9, MNIST bounds, Alg. 50 (trains; ~75 s)
 cargo run -p why-ncm --example chapter15_abstractions  # Exs. 15.5–15.10, Algs. 51–52, nutrition study (trains; ~50 s)
@@ -129,12 +131,14 @@ cargo run -p why-parser --example notebook_graphs  # the book's file format
 ```
 
 The root is a virtual manifest, so these cover all members by default — no
-`--workspace` needed. As of the last verified run the workspace has 343 tests
-(261 in `why-data` plus 49 doctests, 10 in `why-ncm` plus 1 doctest, 21 in
+`--workspace` needed. As of the last verified run the workspace has 355 tests
+(269 in `why-data` plus 53 doctests, 10 in `why-ncm` plus 1 doctest, 21 in
 `why-parser` plus 2 doctests), all passing. The `why-ncm` tests train
 networks and take about 31 s. Clippy 1.100 reports one lint, `needless_range_loop` in
 `fairness/estimate.rs`, which older toolchains did not flag; the warnings this
-file used to record were fixed in f9aee15. The tree is not rustfmt-clean, so do not run
+file used to record were fixed in f9aee15. Cargo's
+`unused_dependencies` manifest lint also flags `web-sys` in `why-data` and
+`futures` in `why-ui`; neither has been investigated. The tree is not rustfmt-clean, so do not run
 `cargo fmt` over it as part of an unrelated change.
 
 `why-data` has no Cargo features, and no `RUSTFLAGS` or `.cargo/config.toml` are
