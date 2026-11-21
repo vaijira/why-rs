@@ -1,18 +1,20 @@
 # AGENTS.md
 
 Guidance for coding agents working in this repository. Human-facing setup docs
-live in [README.md](README.md).
+live in [README.md](README.md). Per-module notes live in
+[docs/agents/](docs/agents/). Read the one for a module before changing it.
 
 ## What this is
 
-A Cargo workspace of Rust causal-inference tools plus a WASM web UI. The root
-[Cargo.toml](Cargo.toml) is a **virtual manifest** — `[workspace]` and profiles
-only, no `[package]`. Every crate lives under [crates/](crates/).
+A Cargo workspace of Rust causal-inference tools, ported from the Causal AI
+book, plus a WASM web UI. The root [Cargo.toml](Cargo.toml) is a **virtual
+manifest** (`[workspace]` and profiles only, no `[package]`). Every crate
+lives under [crates/](crates/).
 
 | Crate | Role |
 | --- | --- |
-| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-calculus, σ-calculus, ID, C-INFER, symbolic SCMs, causal fairness and explanations (chapter 6: Algorithms 15–18, L3 Shapley values), causal RL (chapter 8: CDMs, NUC/SBC, IPW/DP, Algorithms 19–21; chapter 9: causal bounds, POMIS, counterfactual policies, causal imitation, causal games, Algorithms 22–31), statistical transportability (chapter 11: Algorithms 32–38), generalization across the PCH (chapter 12: tr-adjustment, σ-TR and ctf-TR, Algorithms 40–43), neural causal model structure (chapter 13: G-NCM scopes, query worlds, step-unit NCMs, Algorithm 48) |
-| [crates/why-ncm/](crates/why-ncm/) | Neural causal models trained with `burn` (chapter 13: Algorithms 44–49). A separate crate so `burn` stays out of the `why-ui` bundle |
+| [crates/why-data/](crates/why-data/) | Graphs, d-separation, back-door, do-/σ-calculus, ID, C-INFER, symbolic SCMs, and the book's chapters 6, 8, 9, 11, 12 and the tensor-free part of 13 |
+| [crates/why-ncm/](crates/why-ncm/) | Neural causal models trained with `burn` (chapter 13). A separate crate so `burn` stays out of the `why-ui` bundle |
 | [crates/why-parser/](crates/why-parser/) | Parsers: dagitty (pest) and the book's section format (`<NODES>`, `<EDGES>`, `<TASK>`, `<QUERY>`, `<INTERVENTIONS>`) |
 | [crates/why-ui/](crates/why-ui/) | `cdylib`+`rlib` WASM front end built with `dominator` |
 
@@ -21,6 +23,24 @@ static assets (`index.html`, images) live in
 [crates/why-ui/dist/](crates/why-ui/dist/) and generated output goes to
 `crates/why-ui/dist/js/` (gitignored via the `**/dist/js/` pattern — note the
 `**`, a single-level `*/dist/js/` would no longer match at this depth).
+
+## Module notes
+
+| Module | Notes |
+| --- | --- |
+| `graph/cinfer.rs`, `graph/identification.rs`, `cinfer/counterfactual.rs` | [cinfer-id.md](docs/agents/cinfer-id.md) |
+| `graph/sigmacalculus.rs`, `why_parser::fusion` | [sigma-calculus.md](docs/agents/sigma-calculus.md) |
+| `fairness` (§6.1) | [fairness.md](docs/agents/fairness.md) |
+| `explain` (§6.2) | [explanations.md](docs/agents/explanations.md) |
+| `crl`, chapter 8 | [crl-chapter8.md](docs/agents/crl-chapter8.md) |
+| `crl`, chapter 9 | [crl-chapter9.md](docs/agents/crl-chapter9.md) |
+| `transport` (chapter 11) | [transport-chapter11.md](docs/agents/transport-chapter11.md) |
+| `generalize` (chapter 12) | [generalize-chapter12.md](docs/agents/generalize-chapter12.md) |
+| `ncm`, `why-ncm` (chapter 13) | [ncm-chapter13.md](docs/agents/ncm-chapter13.md) |
+| `scm`, `rssn`, WASM builds | [rssn-wasm.md](docs/agents/rssn-wasm.md) |
+
+Each file lists the deliberate departures from the book, the errata found, and
+the random-model tests to rerun after touching the module.
 
 ## The `yarn` vs `yarnpkg` gotcha
 
@@ -112,442 +132,20 @@ involved. The `scm` module was gated behind a feature until `rssn` 0.2.12 made
 it buildable for WASM; the gate is gone and
 [crates/why-data/src/scm.rs](crates/why-data/src/scm.rs) is always compiled.
 
-### C-INFER and ID
 
-[crates/why-data/src/graph/cinfer.rs](crates/why-data/src/graph/cinfer.rs)
-(chapter 4.4: q-trees, d-trees, the `Σ`/`δ`/`σ`/`Γ` operators) and
-[crates/why-data/src/graph/identification.rs](crates/why-data/src/graph/identification.rs)
-(Shpitser-Pearl ID/IDC) share `Formula` and the private `Dist` helper. On
-observational input they must identify exactly the same queries: both are
-complete. `cinfer`'s `agrees_with_id_and_is_numerically_sound` test checks
-this over random graphs. It also evaluates every estimand against the true
-effect of a random latent-confounder model, so run it after touching either
-file. Estimand *strings* can differ: C-INFER conditions each factor on its
-district's blanket, and ID conditions on every predecessor.
+## `rssn` and WASM
 
-[crates/why-data/src/graph/cinfer/counterfactual.rs](crates/why-data/src/graph/cinfer/counterfactual.rs)
-extends C-INFER to counterfactual queries (chapter 5, Correa, Lee & Bareinboim
-2021). It adds CUT unnesting, the Ξ collapse of consistent ctf-factors and a
-counterfactual Γ, and reuses the layer-2 d-trees through `grow_input_tree`.
-`CtfQuery::parse` reads textbook notation such as `P(y_x | x')`. Its
-`estimands_are_numerically_sound` test builds random SCMs with response
-functions and per-variable noise shared across worlds. It checks every
-estimand against the exact counterfactual probability, and checks that
-`P(y_x)` is identified exactly when layer 2 identifies it. It takes about 30s
-in debug. The book's Python (`_counterfactual_engine.py`) is not a reliable
-oracle: its `simplify` zeroes any variable with two values across worlds, and
-its ancestral components never merge across bidirected edges.
-
-### Causal fairness
-
-[crates/why-data/src/fairness.rs](crates/why-data/src/fairness.rs) implements
-chapter 6, section 6.1, on tabular data. There is no dependency, so it is
-WASM-safe, with its own CSV reader, RNG and transport solver. `X`/`Z`/`W`
-are categorical (multi-column `Z`/`W` use joint levels), and `Y` is numeric.
-
-| File | Book |
-| --- | --- |
-| `estimate.rs` | x-specific (both transitions + symmetric, Def. 6.1.32), z-specific (Def. 6.1.19), general TE/NDE/NIE/Exp-SE |
-| `cookbook.rs` | Algorithm 15. Decision rule is "bootstrap CI excludes 0"; z-specific follow-ups are Bonferroni-corrected across strata |
-| `predict.rs` | Thm 6.1.32 in-processing, solved exactly (see below); `Constraints::TotalVariation` is the FPT baseline |
-| `transport.rs` | Algorithm 16 (Causal IF): min-cost-flow OT, monotone coupling for 1-D numeric |
-| `decision.rs` | Algorithms 17 and 18, `estimate_benefit`, Prop. 6.1.40 bounds |
-
-Departures from the text, each deliberate:
-
-- **Signs follow Plečko & Bareinboim**, so `TV = DE − IE − SE` and
-  `TV = DE^sym + IE^sym − SE` hold exactly. `ie_sym` has the sign of the
-  `x0 → x1` transition. Summaries that flip the brackets of x-IE/x-SE are
-  inconsistent with the identity they quote. Eq. 6.305 has a typo (it should
-  read `x-IE_{x0,x1}`).
-- **In-processing with W ∈ BN matches `x-IE^sym`, not both IE transitions.**
-  The two TV decompositions imply `IE₀₁ + IE₁₀ = DE₀₁ + DE₁₀`. Once both DEs
-  are forced to 0, matching each IE to `Y` is infeasible in general. With
-  discrete covariates every ID constraint is linear in the cell table, so the
-  program is solved in closed form by KKT. The five causal constraints have
-  rank 4, which `solve_consistent` tolerates.
-- **Causal IF is evaluated on the transformed data** `(X, Z̃, W̃, Ỹ)`, not on
-  `(X, Z, W, Ỹ)`. The theorem only holds on the former. `transform` is exact
-  (a weighted table); `transform_sampled` draws one value per row.
-- **Algorithms 17/18 never treat `Δ ≤ 0`.** This follows the optimality
-  statement of Prop. 6.1.41, so Eq. 6.493's budget equality becomes `≤ b`.
-  Algorithm 18 maximises `E[Δ·d]`, not Eq. 6.494's sum of conditional means.
-  It enumerates the vertices of the feasible polygon cut by the gain
-  breakpoints, so it is exact.
-- `Measures`/`ZEffects`/`GeneralMeasures` snap differences within 1e-9 of the
-  outcome scale to 0. Without that, a measure that vanishes by construction
-  comes out as ±1e-17 with an equally tiny bootstrap SE, and gets flagged.
-
-Tests to run after touching a file: `estimands_match_brute_force_counterfactuals`
-(estimate.rs, checks all five counterfactual means against noise
-enumeration), `in_processing_meets_its_constraints` (predict.rs),
-`causal_if_zeroes_the_unpermitted_pathways` and
-`transport_solver_is_optimal_in_one_dimension` (transport.rs), and
-`algorithm_18_is_optimal_and_respects_the_gap` (decision.rs, against a grid
-search). `startup_hiring_nde_vanishes_but_z_de_does_not` is Ex. 6.9/6.11 with
-exact numbers.
-
-There is no chapter 6 code in the book's companion Python (`causalai-book`),
-so nothing was ported from it; the source is section 6.1.4 of the book
-(pp. 450–487 of the Oct 2025 draft). Ex. 6.21 (college admissions over time) is not ported because the
-book gives no initial values for κ, λ, α, β.
-
-Not implemented here: BN-sets over individual columns rather than whole blocks, principal
-fairness (Def. 6.1.36, which the book argues against), and continuous
-covariates (bin them).
-
-### Causal explanations
-
-[crates/why-data/src/explain.rs](crates/why-data/src/explain.rs) implements
-section 6.2 (marked as a draft in the book): the NTE, the GDE and
-counterfactual (L3) Shapley values, plus SHAP (L1) and do-Shapley (L2) for
-comparison. Everything reduces to one mean per set `S`,
-`m(S) = Σ_s P(S = s) E[Y_{S=s} | e]`, from which `NTE(S) = m(∅) − m(S)`,
-`GDE_S(X) = m(S) − m(S ∪ {X})`, and `φ^L3` is the Shapley value of the game
-`v(S) = NTE(S)`.
-
-- **It works on an `scm::Model`, not on data.** `E[Y_s | e]` conditions on
-  evidence that includes `Y`, e.g. `P(y_x | x', y')`. That is not identifiable
-  from L1/L2 data even without confounding (Thm 6.1.13 (iv)), and
-  `ctf_infer` rejects it as an inconsistent ctf-factor. The book's examples
-  all assume a known SCM too.
-- `E[Y_s | e]` uses `scm`'s shared exogenous draw. It intervenes, takes Y's
-  qualified name in that world (`{y}_{x=1}`), and tabulates it with the
-  evidence from the **observational** world. Evidence names must be resolved
-  there: inside an intervened world, `"x"` resolves to that world's copy.
-- Cost is `2^|X|` subsets times `|D_S|` interventions, each a full
-  enumeration of `U`. Exact Shapley values are capped at 20 variables.
-- The tests are the book's Ex. 6.37–6.43 with exact numbers, plus random
-  SCMs checking efficiency (Cor. 6.2.2), Thm 6.2.1 along an ordering, and
-  admissibility for a variable with no path to `Y`.
-
-Possible follow-ups: identification of individual `m(S)` terms through
-`ctf_infer` when the evidence excludes `Y`, bounds when it does not, and
-permutation-sampled Shapley values for larger `X`.
-
-### Causal reinforcement learning
-
-[crates/why-data/src/crl.rs](crates/why-data/src/crl.rs) implements chapter 8,
-sections 8.1–8.2.3.1. Like `fairness`, it has no new dependency, so it is
-WASM-safe. It reuses `fairness::Dataset` (re-exported as `crl::Dataset`) and
-`fairness::SplitMix64`.
-
-| File | Book |
-| --- | --- |
-| `space.rs` | `PolicySpace` (Def. 8.1.1, `validate` checks the non-descendant constraints), `Reward` (Def. 8.1.2) |
-| `policy.rs` | `Policy` trait: `Deterministic`, `Stochastic`, `Uniform` (π_UNIF), `TabularPolicy` |
-| `conditions.rs` | `nuc` (Def. 8.2.1, on an `scm::Model`), `sequential_backdoor` (Def. 8.2.3, on an `Admg`) |
-| `offpolicy.rs` | `ipw` (Thm 8.2.1), `dp` (Thm 8.2.2), `optimize` (backward induction or enumeration) |
-| `cdm.rs` | `Cdm` (Def. 8.1.3, exact evaluation and planning, also an `Environment`), `Task` (Def. 8.1.4) with `run` = Algorithm 19 |
-| `online.rs` | `Rct` (Algorithm 20), `Ucb` (Algorithm 21), Thm 8.2.4/8.2.5 bounds, Eq. 8.101 |
-
-Facts that are easy to get wrong:
-
-- **Propensities and Q-functions condition on the history
-  `X̄_{i−1} ∪ S̄_i`**, not on `S_i`. `PolicySpace` keeps one temporal ordering
-  of all `S`/`X` variables, so every history is a prefix of it. The
-  estimators key cells by prefix.
-- **IPW and DP are the same plug-in functional.** They agree to 1e-10 on any
-  data set, whether or not NUC or SBC holds. The random-SCM test asserts
-  this, and that SBC ⇒ both equal `Cdm::evaluate` (Thm 8.2.8),
-  NUC ⇒ SBC (Cor. 8.2.7), and that data under any policy evaluate any other
-  (Lemma 8.2.3).
-- **`Cdm::optimal` runs `optimize` on the exact table under π_UNIF.** That
-  table satisfies Exp-NUC and full positivity, so the plan is exact.
-  `optimize` uses backward induction only with perfect recall
-  (`S_i = X̄_{i−1} ∪ S̄_i`). Otherwise it enumerates deterministic policies,
-  capped at 200 000.
-- **Positivity is an error, not a dropped term**: `CrlError::Positivity`
-  names the stage, history and action. Rules must sum to 1 over the levels
-  the data shows for the action.
-- The DTR of Eq. 8.2 has continuous noise, so it cannot be an `scm::Model`.
-  The tests and the example build its exact table in closed form. Y has an
-  extra logistic noise `U5` (listed in Eq. 8.80, missing from Eq. 8.2),
-  without which Table 8.5 cannot be reproduced. Its exact optimum is
-  0.67574. The book prints 0.6758, which comes from rounded Q-values.
-
-Book errata found while porting: Eq. 8.119 should read `Y ← S1 ⊕ X2 ⊕ U3`,
-not `S1 ⊕ X1 ⊕ U3`. Tables 8.7–8.8, Eq. 8.124 and the text's back-door path
-all need X2. Eq. 8.101's "N ≈ 878" uses `log₁₀`; the natural log, which the
-derivation implies, gives 2021.
-
-Not implemented: do-calculus policy identification (Sec. 8.2.3.2). When SBC
-fails, `Task::run` returns `NotIdentifiable`. Infinite-horizon MDP planning
-(Ex. 8.5) exists only for tabular MDPs, through chapter 9's
-`CtfMdp::experimental_value_iteration`, which reproduces Table 8.1.
-
-### Causal RL tasks (chapter 9)
-
-Chapter 9 lives in the same `crl` module, one file per task. All of it is
-dependency-free and builds for WASM. [crates/why-data/src/crl/lp.rs](crates/why-data/src/crl/lp.rs)
-is a small dense two-phase simplex (Bland's rule) used by the optimistic
-planner, Causal MWAL and Nash support enumeration. The chapter 9 tests are in
-`crl/tests9.rs`.
-
-| File | Book |
-| --- | --- |
-| `cool.rs` | Task 1: `natural_bounds` (Thm 9.2.2), `causal_bounds` (Thms 9.2.5–9.2.6, `Γ` of Eq. 9.49), `policy_bounds` (Eq. 9.67), `UcbPlus` (Alg. 23), `UcbTransfer` (Alg. 22, UCB−), `UcbCdm` (Algs. 24/25) |
-| `mixed.rs` | Task 2 without context: `latent_projection`, MIS (Prop. 9.3.1), `muct`, `interventional_border`, `pomis` (Thm 9.3.2) |
-| `ctf.rs` | Task 3: `ett`, `CtfRct`/`CtfUcb` (Algs. 26/27) on a `CtfEnvironment`, `CtfMdp` (Eq. 9.174) with value iteration, `CtfUcbvi` (Algs. 28/29) |
-| `imitation.rs` | Task 4: `imitation_backdoor` (Def. 9.5.3), minimal subspaces (Def. 9.5.5), `behavioral_cloning`, `imitation_distribution` (Thm 9.5.4), `causal_mwal` (Prop. 9.5.5, exact LP) |
-| `games.rs` | Sec. 9.6: `Bimatrix` equilibria, `CausalGame` from an SCM, `learn_cne` (Alg. 30), `ctf_nash_learning` (Alg. 31, deterministic rewards) |
-
-Facts that are easy to get wrong:
-
-- **Thm 9.3.2 projects onto `X⋆ ∪ {Y}`**, not `X′ ∪ {Y}` as printed. The
-  `some_pomis_is_optimal_on_random_scms` test checks completeness against
-  brute force.
-- **Thm 9.5.4 is false when a stage passes only condition 1** of the
-  imitation backdoor (X_i not an ancestor of Y) while X_i and Y share a
-  confounder. `ImitationCondition::Blocked` takes precedence in reports so
-  callers can tell; `condition_1_breaks_theorem_9_5_4` is the counterexample.
-- **The greedy casino needs `X ← U_D ⊕ U_B`** (Eq. 9.98 prints a negation
-  that contradicts Table 9.6 and Ex. 9.12).
-- **Book table errata**: Table 9.9's `S′ = 0, X′′ = 1` block is a copy of the
-  `X′′ = 0` block; Table 9.11's `Q*(s, x′, x′)` should be 8.2, not 1; Ex. 9.15's
-  best experimental policy is `X ← S` (Table 8.1), not `X ← ¬S`; Fig. 9.36 is
-  truncated rather than rounded in places (compare Table 9.17).
-- **Experiment 9.4's `r_π = 0.6283` is not reproducible.** Every entry of
-  Table 9.3 is (to 4 decimals, by quadrature over U), and the exact bound for
-  that policy is 0.6788.
-- **Equilibrium selection** is the first pure NE in row-major order, which
-  reproduces Tables 9.15 and 9.37(b); the book leaves it open.
-- **Eq. 9.197's bonus constant 7** makes UCBVI stall at `Q = H` for any test-
-  sized run; `CtfUcbvi::bonus` exposes it, and the test uses 0.3.
-- Figures 9.12, 9.30 and 9.31 are not given as edge lists; the tests
-  reconstruct them from the c-factorisation and the worked examples, and
-  say so.
-
-Not implemented: mixed policies with context (Sec. 9.3.2), hybrid policies
-under an autonomy budget (Sec. 9.4.3), Causal GAIL (Prop. 9.5.6) and
-Secs. 9.6.5–9.6.6.
-
-### Transportability (chapter 11)
-
-[crates/why-data/src/transport.rs](crates/why-data/src/transport.rs)
-implements chapter 11, layer-1 generalization across domains. It adds no
-dependency and builds for WASM. A `SelectionDiagram` is an `Admg` plus one
-discrepancy set `Δ^{k,*}` per source. Its S-nodes are implicit;
-`augmented()` materialises them as `S_<source>`. Estimands are
-`transport::Estimand`, not `Formula`, because each factor names its domain
-(`P^1(y | x)`, `P^*(z)`). `Estimand::evaluate` runs on any `Distributions`.
-`EmpiricalDistributions` (one `fairness::Dataset` per domain) is the plug-in
-estimator.
-
-| File | Book |
-| --- | --- |
-| `direct.rs` | Thm 11.2.1, `list_dtr_dist` (Alg. 32), structural covariate shift (Def. 11.2.3) |
-| `score.rs` | `score_tr` (Alg. 33), `transportable_feature_sets` (maximal sets, Def. 11.2.5) |
-| `partial.rs` | Thms 11.3.1–11.3.3, `statistical_transport` (Thm 11.3.4) |
-| `representation.rs` | determined/constrained/free features (Def. 11.2.8); `SelectionDiagram::augment` is Def. 11.2.9 |
-| `invariance.rs` | CMS (Assumption 11.2.12), source invariance with a χ² test (Def. 11.2.11) |
-| `adaptation.rs` | Algs. 34–38: structure-informed/agnostic DA, multi-cause, sequential |
-
-Facts that are easy to get wrong:
-
-- **Thm 11.3.4's `pa⁺` must be Tian's set.** `pa⁺` should be
-  `Pa(T_i) \ {V_i}`, which adds the parents of the earlier members of the
-  c-component. The printed Eq. 11.241 is constant in `x2` while the truth is
-  not; `example_11_34_needs_tians_conditioning_set` shows it.
-- **Score-TR gets each c-factor from ID**, on the latent projection onto
-  `W ∪ Z̃`. Line 11 of Alg. 33 is only the Markovian formula. Without the
-  projection, ID mentions ancestors of `Z̃` that nothing sums out. Line 16's
-  denominator sums over `W \ (Z \ Z̃)`, not `W \ {y}`.
-- **ID primes captured indices (`v0'`)**, and `Estimand::evaluate` reads a
-  primed name as its unprimed variable. Keep that if you touch either.
-- `score_tr_and_the_product_agree_and_are_sound` runs Score-TR and Thm 11.3.4
-  with `W = ∅` over 150 random multi-domain models. Both claim completeness,
-  so they must decide the same queries, and every estimand must equal the
-  true `P*(y | z)`. `the_product_is_sound_and_subsumes_the_scenarios` adds
-  random target measurements. Run both after touching `score.rs`,
-  `partial.rs` or `estimand.rs`.
-- Book errata: Ex. 11.30 misses `Z = {Z, R}`, so Thm 11.3.3 does apply.
-  Ex. 11.4's 3/8 is a joint; the conditional is 3/4. Ex. 11.40's equations
-  contradict each other. Figs. 11.12–11.15, 11.20, 11.33 and 11.34 have no
-  edge lists, so the tests reconstruct them from the text. The Fig. 11.13
-  reconstruction matches Ex. 11.12's four maximal sets but has 25
-  transportable sets, not Fig. 11.14's 15.
-
-Not implemented: Alg. 39 (enumerates every partition of positions and every
-set of graphs), the optimisation approach of Sec. 11.4.4, and learning
-representations by UIRM (Def. 11.2.13). There is no chapter 11 code in the
-book's companion Python.
-
-### Generalization across the PCH (chapter 12)
-
-[crates/why-data/src/generalize.rs](crates/why-data/src/generalize.rs)
-implements chapter 12. It transports causal (layer 2) and counterfactual
-(layer 3) quantities, where chapter 11 transported statistical ones. It
-reuses chapter 11's `SelectionDiagram` and `Estimand` and the C-INFER
-engines, adds no dependency, and builds for WASM. Chapter 11's `Domain`
-gained two variants: `Under(domain, Regime)` for `P^k(V; σ_Z)` and `Policy`
-for the target policy's `P̂(x | pa*)`. A `Regime` is a map from a variable
-to `Atomic` or `Policy { parents }`, and `Regime::apply` builds `G_σ`.
-`Distributions::conditional` is a new provided method, and
-`WithPolicy`/`TargetPolicy` override it to supply `P̂`.
-
-| File | Book |
-| --- | --- |
-| `adjustment.rs` | e-adjustment (Def. 12.1.2) by `e_adjustment_order` = Alg. 40; tr-adjustment (Defs. 12.1.1, 12.1.3), Eq. 12.18, Thm 12.1.6 |
-| `policy.rs` | σ-TR / g-TR: q-tree, `grow` = Alg. 41 (π- and σ-operators), `sigma_tr` = Alg. 43 |
-| `counterfactual.rs` | ctf-TR: chapter 5's q-tree (Alg. 42) with Alg. 41's d-trees |
-
-Facts that are easy to get wrong:
-
-- **Condition (12.16) is rule 3.** `G_{X(Z≤i−1)}` is read as cutting the
-  edges into the treatments that are not ancestors of `Z≤i−1`. The random
-  test `e_adjustment_holds_exactly_when_the_formula_does` checks Thm 12.1.2
-  in both directions on that reading. Def. 12.1.1 (i) names no graph and is
-  read the same way, and Lemma 12.1.4 then holds on random diagrams.
-- **Completeness tests need faithful models.** A random boolean response
-  function of one bit is constant half the time, so the test `Model` uses
-  continuous random conditionals (`k = 0`) for layer 2. Only the
-  counterfactual tests use response functions (`Model::with_noise(.., 4)`).
-- **Inputs keep their intervened variables.** A d-tree's root is
-  `Q^k[V; σ_Z]` over all of `V`, grown by `cinfer::grow_input_tree` on
-  `G_σZ` as if observational. An atomic input is evaluated as a trial that
-  randomizes `Z`, so `do(z)` terms carry `z` as a conditioning variable,
-  which `Estimand`'s display moves into `do(·)`.
-- **Domains ride in `Formula::P::doing` as tags** (`"\0k"`) while
-  `Formula` simplifies and avoids capture, so the chain rule never merges
-  terms of different inputs. `policy::to_estimand` decodes them. Keep that
-  in mind if `Formula::simplify` starts reading `doing`.
-- `cinfer::counterfactual::compose` was split out of `ctf_infer` so ctf-TR
-  can feed it factors from other domains. `build`, `Plan` and `Built` are
-  `pub(crate)` for the same reason.
-- **Conditional σ-TR queries are a plain ratio** over `An(Y ∪ W)` in
-  `G_σX`. That is sound but can be incomplete, since it lacks layer 2's rule-2
-  refinement.
-- **Separation queries draw one S-node.** `SelectionDiagram::augmented_for(source)`
-  (and the crate-internal `with_s_node`, which keeps an isolated node when
-  `Δ` is empty) draws only that source's S-node. `augmented()` draws them
-  all. There another source's S-node acts as a common cause of its
-  children, which made chapter 11's `is_s_admissible`, `list_dtr_dist` and
-  Thm 11.3.1 miss valid sets when sources share discrepancies. All three use
-  `with_s_node` now. See the test
-  `other_sources_s_nodes_do_not_connect_their_children`. `project()` still
-  uses `augmented()`, which is correct: the S-nodes are kept roots there.
-
-`sigma_tr_is_sound_and_extends_c_infer` and `ctf_tr_is_sound_and_extends_ctf_infer`
-draw random diagrams, inputs (any domain, natural, atomic or soft) and
-regimes. They check every estimand against the exact target quantity, and
-check that target-only data decide exactly what C-INFER does. Exs. 12.11,
-12.14 and 12.15 reproduce Eqs. 12.53, 12.75 and 12.77 verbatim.
-
-Book notes: Ex. 12.13 fixes `x1` (Eq. 12.66's indicator) although `σ*`
-says `σ_{X1} = P̂(X1)`, and Eq. 12.33 sums it. The tests sum it. Exercise
-12.12's solution drops `z` from `P(y | x1, x2, z; σ*)`, but Eq. 12.67 keeps
-it. Figs. 12.3, 12.5, 12.6 and 12.19 have no edge lists, so the tests
-reconstruct them from the derivations. The loan study's bidirected edges
-come from Fig. 12.14's trees. Fig. 12.4 (Ex. 12.4) and Fig. 12.11 (Ex. 12.12)
-are not reconstructed. There is no chapter 12 code in the book's companion
-Python.
-
-### Neural causal models (chapter 13)
-
-Chapter 13 is split in two crates. The tensor-free part is
-[crates/why-data/src/ncm.rs](crates/why-data/src/ncm.rs):
-
-- `c2_components` (Def. 13.1.10, maximal bidirected cliques, which may
-  overlap) and `NcmStructure` (Def. 13.1.11).
-- `expand`, which lays a `CtfQuery` out over worlds. `Fix::Copy` is a
-  nested subscript, as in `Y_{x, W_{x'}}`.
-- `StepNcm`, built from the book's `f̂_AND`, `f̂_OR`, `f̂_NOT` and `f̂_≥z`
-  units. It is evaluated exactly by splitting `[0, 1]^k` at the thresholds
-  of the units that read a noise. `parent()` returns an identity unit, so
-  arrays of units need no `.into()`. Its tests reproduce Exs. 13.5, 13.6,
-  13.10, 13.15 and 13.16 to the last digit. `StepNcm::sample` is
-  Algorithm 48.
-
-Training is in [crates/why-ncm/](crates/why-ncm/), which depends on `burn`
-0.22 (`flex` CPU backend, `autodiff`, `optim`). It builds for
-`wasm32-unknown-unknown` with no extra configuration, using the getrandom
-features `why-data` already selects. burn 0.22 has no backend type
-parameter: tensors are `Tensor<D>`, and the device is
-`Device::flex().autodiff()`.
-
-| File | Book |
-| --- | --- |
-| `model.rs` | `Ncm`: one MLP per variable over one-hot parents and its C²-components' uniforms (Def. 13.1.11, Eq. 13.141) |
-| `explicit.rs` | MLE-NCM likelihood (Eqs. 13.142, 13.144) and exact enumeration of the query's worlds (Eqs. 13.145–13.147) |
-| `implicit.rs` | sampling, `Ncm::sample` (Algorithm 48), MMD and the Table 13.6 log losses |
-| `identify.rs` | `neural_id` (Algorithms 44/46, trained as 47 or 49), `fit`, `symbolic_then_neural` (Algorithm 45, deciding with `ctf_infer`) |
-
-Facts that are easy to get wrong:
-
-- **Eq. 13.146 is unsound.** It multiplies `σ` across worlds, as if each
-  world drew fresh sampling noise. That violates consistency. The explicit
-  model shares `ε_V` (inverse CDF) and `δ_V` (an order gate `g_V`) across
-  worlds, so the joint is an exact, differentiable sum of overlaps.
-  `worlds_share_each_variables_noise` checks consistency on an untrained
-  model.
-- **The gate is not decoration.** Without it, binary variables are
-  comonotone across worlds given `û`, and the maximizing model on Ex. 13.16
-  stalls at PS ≈ 0.04 instead of 1.
-- **Empty overlaps have no gradient.** Training uses a straight-through leak
-  and an unclamped `log(q + 1e-6)`; evaluation is exact.
-- **Use `Kind::Explicit` for identification.** `Kind::Implicit` (Gumbel-max
-  sampling, MMD) is right on Markovian models. With bidirected edges it does
-  not learn to use `Û_C`: it returns about 0.40 on Ex. 13.10's front door
-  (truth 0.469), whatever `λ`, epochs or width. The data term is MMD, not
-  MMD²; the square is flat at the optimum and lets the query term win.
-  The xx term of the MMD sums rows before summing the row means, because a
-  single f32 sum over 4096² entries came out at 0.13 instead of 0.0002.
-- `λ` decays geometrically from 1 to 0.001 (Sec. 13.3.3.1), and the
-  learning rate to a tenth. The bow graph's min/max land near the natural
-  bounds [54/256, 166/256], which Ex. 13.6's M̂4 and M̂3 attain.
-
-There is no chapter 13 code in the book's companion Python. The book's
-simulation code is at `CausalAILab/NCMCounterfactuals` on GitHub (PyTorch),
-but nothing here was ported from it.
-
-Not implemented: continuous variables, the GAN discriminator, choosing `τ`
-empirically, and Thm 13.1.4's general canonical-SCM-to-NCM construction
-(only Ex. 13.5's instance appears, in the tests).
-
-### σ-calculus
-
-[crates/why-data/src/graph/sigmacalculus.rs](crates/why-data/src/graph/sigmacalculus.rs)
-ports the book's `SigmaCalculusInspector` (Correa & Bareinboim 2020), reusing
-`docalculus`'s formatting helpers. It deliberately departs from the Python in
-three places, listed in its module docs. The Python has a mutable-default-list
-bug in `TransformNodes` that leaks cuts between queries. So when its answers
-disagree with this module, check the Python first. Its test graphs were
-cross-checked by running the Python inspector, which needs `networkx`,
-`toposort` and `pydash`. There is no σ-calculus notebook, so there is no
-`examples/` port. `why_parser::fusion` reads the book's `<QUERY>` and
-`<INTERVENTIONS>` sections, and `Document::sigma_calculus` runs the rule they
-describe. Watch the naming: `treatment:` is X in `<TASK>` but Z in `<QUERY>`.
-
-### `rssn` and WASM
-
-[crates/why-data/src/scm.rs](crates/why-data/src/scm.rs) depends on
-[`rssn`](https://crates.io/crates/rssn) for symbolic expressions. It is an
-unconditional dependency, so **`rssn` is in the browser bundle** — `why-ui`
-depends on `why-data`.
-
-It builds for `wasm32-unknown-unknown`, verified:
+`rssn` is an unconditional dependency of `why-data`, so it ships in the
+browser bundle. Keep its requirement pinned to an exact patch release, 0.2.13
+or newer, never a bare `0.2`: older releases pull in `atomic-wait`, which does
+not build for wasm. Verify with:
 
 ```sh
 cargo build -p why-data --target wasm32-unknown-unknown
 cargo build -p why-ui-rs --target wasm32-unknown-unknown
 ```
 
-Three things make that work, and the third is why the `rssn` requirement is
-pinned to an exact patch release rather than `0.2`:
-
-1. **`getrandom`**, which `rssn` pulls in three generations of (`rand`
-   0.8/0.9/0.10 → getrandom 0.2/0.3/0.4). All three are declared as
-   target-gated dependencies of `why-data` with `js` (0.2) and
-   `wasm_js` (0.3, 0.4). Features are enough: 0.3.4 and 0.4.3 pick the browser
-   backend on `#[cfg(feature = "wasm_js")]` alone, despite 0.3.4's error text
-   still insisting the feature is "insufficient" — that message is stale, and
-   older 0.3.x really did also want `--cfg getrandom_backend="wasm_js"`.
-2. **`uuid`** with its `js` feature, likewise.
-3. **`rssn` 0.2.13 or newer.** Up to 0.2.11 it declared a bare
-   `faer = "0.24"`, whose default features include `rayon` → `spindle` →
-   `atomic-wait`, and `atomic-wait` 1.1 (latest, Jan 2023) has no wasm
-   `platform` module, so the build died with `cannot find module platform`.
+The getrandom/uuid feature setup is in [rssn-wasm.md](docs/agents/rssn-wasm.md).
 
 ## Conventions
 
