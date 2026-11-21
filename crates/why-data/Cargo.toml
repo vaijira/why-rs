@@ -63,6 +63,10 @@ name = "chapter16_discovery"
 [[example]]
 name = "chapter17_multidomain"
 
+# Chapter 18 has no notebook either; CRID on its examples and experiments.
+[[example]]
+name = "chapter18_representation"
+
 # WASM-only opt-ins. `rssn` reaches three generations of `rand`, and each
 # `getrandom` behind them refuses to build for wasm32-unknown-unknown until a
 # source of randomness is named; `uuid` does the same. Cargo features are

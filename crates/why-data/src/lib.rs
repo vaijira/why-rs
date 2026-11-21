@@ -26,6 +26,8 @@ pub mod generalize;
 pub mod graph;
 // Documented by its own `//!` header.
 pub mod ncm;
+// Documented by its own `//!` header.
+pub mod representation;
 // Documented by its own `//!` header, which is where the intra-doc links
 // resolve from; an outer `///` here would shadow it and break them.
 pub mod scm;
