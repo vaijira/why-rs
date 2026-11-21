@@ -51,8 +51,7 @@ pub fn list_dtr_dist(
         )));
     }
     let delta = d.delta(source)?;
-    let g = d.augmented();
-    let s = d.s_node(source);
+    let (g, s) = d.with_s_node(source)?;
     let r: BTreeSet<String> = candidates.iter().map(|c| (*c).to_string()).collect();
     let mut out = Vec::new();
     // With no discrepancy every set separates; the S-node is isolated.

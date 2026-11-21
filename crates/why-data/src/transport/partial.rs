@@ -127,8 +127,7 @@ pub fn outcome_measured(
         .filter(|v| !x.contains(v) && **v != y)
         .map(|s| (*s).to_string())
         .collect();
-    let s = d.s_node(source);
-    let g = d.augmented();
+    let (g, s) = d.with_s_node(source)?;
     let found = first_subset(pool, |z| Ok(g.is_d_separated(&[&s, y], x, z)?))?;
     Ok(found.map(|z| {
         let src = Domain::source(source);

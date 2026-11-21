@@ -297,7 +297,7 @@ pub struct CTree<T = Term, O = Operator> {
 }
 
 impl<T: PartialEq, O> CTree<T, O> {
-    fn new(term: T) -> Self {
+    pub(crate) fn new(term: T) -> Self {
         Self {
             nodes: vec![CTreeNode {
                 term,
@@ -312,7 +312,7 @@ impl<T: PartialEq, O> CTree<T, O> {
     /// Adds `term` under `parent`, or returns the existing child that already
     /// stands for it, so that d-tree paths for different leaves share their
     /// common prefix.
-    fn add_child(&mut self, parent: usize, term: T, op: O) -> usize {
+    pub(crate) fn add_child(&mut self, parent: usize, term: T, op: O) -> usize {
         if let Some(&existing) = self.nodes[parent]
             .children
             .iter()
@@ -498,7 +498,7 @@ fn connected(g: &Admg, seeds: &VarSet) -> VarSet {
     seen
 }
 
-fn c_components(g: &Admg) -> Vec<VarSet> {
+pub(crate) fn c_components(g: &Admg) -> Vec<VarSet> {
     g.c_components()
         .into_iter()
         .map(|c| c.into_iter().collect())
@@ -640,7 +640,11 @@ pub fn gen_input_tree(
 
 /// The d-tree of `input` towards each of `targets`, as [`gen_input_tree`]
 /// describes; the `σ` step reads a reached target in its own regime.
-fn grow_input_tree(g: &Admg, input: &Input, targets: &[CFactor]) -> Result<CTree, DSepError> {
+pub(crate) fn grow_input_tree(
+    g: &Admg,
+    input: &Input,
+    targets: &[CFactor],
+) -> Result<CTree, DSepError> {
     let z = &input.doing;
     let v: VarSet = g.variables().into_iter().map(ToString::to_string).collect();
     let mut tree = CTree::new(Term::Factor(CFactor {
@@ -772,7 +776,7 @@ fn minimal_givens(g: &Admg, order: &[String]) -> Result<Vec<Vec<String>>, DSepEr
 
 /// The formula for d-tree node `node`, by applying each operator along the
 /// path from the input at the root.
-fn evaluate(
+pub(crate) fn evaluate(
     g: &Admg,
     t_p: &CTree,
     node: usize,

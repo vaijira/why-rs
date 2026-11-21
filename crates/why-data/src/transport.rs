@@ -113,6 +113,7 @@ pub use adaptation::{
 };
 pub use direct::{is_directly_transportable, list_dtr_dist, structural_covariate_shift};
 pub use estimand::{Distributions, EmpiricalDistributions, Estimand};
+
 pub use invariance::{
     InvarianceReport, LevelScores, cms_holds, invariant_feature_sets, source_invariance,
     source_invariance_by,
@@ -179,19 +180,64 @@ impl fmt::Display for TransportError {
 
 impl std::error::Error for TransportError {}
 
-/// A domain: the target `π*` or a named source.
+/// A domain: the target `π*` or a named source, possibly under an
+/// intervention regime.
+///
+/// Chapter 11 only reads the natural regime of each domain. Chapter 12
+/// ([`crate::generalize`]) also reads distributions collected under
+/// interventions, `P^k(V; σ_Z)`, and factors that the target policy itself
+/// defines, `P̂(x | pa*)`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Domain {
     /// The target domain `π*`.
     Target,
     /// A source domain, by name.
     Source(String),
+    /// A domain (never itself `Under` or `Policy`) under a non-empty
+    /// intervention regime: the distribution `P^k(V; σ_Z)`.
+    Under(Box<Domain>, Regime),
+    /// The target policy `σ*_X`: its factors `P̂(x | pa*)` are known by
+    /// definition rather than estimated.
+    Policy,
 }
 
 impl Domain {
     /// The source domain called `name`.
     pub fn source(name: impl Into<String>) -> Self {
         Self::Source(name.into())
+    }
+
+    /// This domain under `regime`: itself if `regime` is empty, and the
+    /// regime replaces any the domain already had.
+    #[must_use]
+    pub fn under(self, regime: Regime) -> Self {
+        let base = match self {
+            Self::Under(base, _) => *base,
+            other => other,
+        };
+        if regime.is_empty() || base == Self::Policy {
+            base
+        } else {
+            Self::Under(Box::new(base), regime)
+        }
+    }
+
+    /// The domain without its regime.
+    #[must_use]
+    pub fn base(&self) -> &Self {
+        match self {
+            Self::Under(base, _) => base,
+            other => other,
+        }
+    }
+
+    /// The regime the distribution was collected under, if any.
+    #[must_use]
+    pub fn regime(&self) -> Option<&Regime> {
+        match self {
+            Self::Under(_, r) => Some(r),
+            _ => None,
+        }
     }
 }
 
@@ -200,7 +246,161 @@ impl fmt::Display for Domain {
         match self {
             Self::Target => f.write_str("*"),
             Self::Source(s) => f.write_str(s),
+            Self::Under(d, r) => write!(f, "{d}; {r}"),
+            Self::Policy => f.write_str("σ*"),
         }
+    }
+}
+
+/// How a regime sets one variable.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Intervention {
+    /// `do(x)`: the variable is fixed. In an *input* distribution an atomic
+    /// intervention stands for a trial at every level, which is the same as
+    /// randomizing it, so its value appears as an ordinary conditioning
+    /// variable when the estimand is evaluated.
+    Atomic,
+    /// A soft intervention `σ_X = P̂(x | pa*)`: the variable is drawn from a
+    /// known policy of `parents`, which replace its natural parents, and it
+    /// no longer listens to the unobserved confounders it had. A randomized
+    /// trial is a policy with no parents.
+    Policy {
+        /// The policy's inputs `pa*`.
+        parents: BTreeSet<String>,
+    },
+}
+
+/// A regime `σ_Z`: the interventions in force, keyed by the variable each
+/// one sets. The empty regime is the natural (observational) one.
+///
+/// ```
+/// use why_data::transport::Regime;
+///
+/// let r = Regime::new().atomic(&["X1"]).policy("X2", &["X1", "Z"]);
+/// assert_eq!(r.to_string(), "do(x1), σ_{X2}");
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Regime {
+    interventions: std::collections::BTreeMap<String, Intervention>,
+}
+
+impl Regime {
+    /// The natural regime: nothing intervened.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The same regime with `vars` also fixed by `do(·)`.
+    #[must_use]
+    pub fn atomic(mut self, vars: &[&str]) -> Self {
+        for v in vars {
+            self.interventions
+                .insert((*v).to_string(), Intervention::Atomic);
+        }
+        self
+    }
+
+    /// The same regime with `var` also drawn from a policy of `parents`.
+    #[must_use]
+    pub fn policy(mut self, var: &str, parents: &[&str]) -> Self {
+        self.interventions.insert(
+            var.to_string(),
+            Intervention::Policy {
+                parents: parents.iter().map(|p| (*p).to_string()).collect(),
+            },
+        );
+        self
+    }
+
+    /// Whether nothing is intervened on.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.interventions.is_empty()
+    }
+
+    /// Every intervened variable, sorted.
+    pub fn variables(&self) -> impl Iterator<Item = &str> {
+        self.interventions.keys().map(String::as_str)
+    }
+
+    /// How `var` is set, if it is intervened on.
+    #[must_use]
+    pub fn get(&self, var: &str) -> Option<&Intervention> {
+        self.interventions.get(var)
+    }
+
+    /// Every intervention, keyed by its variable.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &Intervention)> {
+        self.interventions.iter().map(|(k, v)| (k.as_str(), v))
+    }
+
+    /// The variables fixed by `do(·)`.
+    #[must_use]
+    pub fn atomic_variables(&self) -> BTreeSet<String> {
+        self.iter()
+            .filter(|(_, i)| **i == Intervention::Atomic)
+            .map(|(v, _)| v.to_string())
+            .collect()
+    }
+
+    /// `G_σ`: the diagram with every edge into an intervened variable
+    /// removed, bidirected ones included, and an edge from each policy
+    /// parent added.
+    ///
+    /// # Errors
+    ///
+    /// [`DSepError::Unknown`] for a name not in `g`, and
+    /// [`DSepError::Cyclic`] when a policy reads one of its variable's
+    /// descendants.
+    pub fn apply(&self, g: &Admg) -> Result<Admg, DSepError> {
+        for (v, i) in self.iter() {
+            if g.node(v).is_none() {
+                return Err(DSepError::Unknown(v.to_string()));
+            }
+            if let Intervention::Policy { parents } = i
+                && let Some(p) = parents.iter().find(|p| g.node(p).is_none())
+            {
+                return Err(DSepError::Unknown(p.clone()));
+            }
+        }
+        let vars: Vec<&str> = self.variables().collect();
+        let mut out = g.cut_edges_into(&vars)?;
+        for (v, i) in self.iter() {
+            if let Intervention::Policy { parents } = i {
+                for p in parents {
+                    out.directed(p, v);
+                }
+            }
+        }
+        out.topological_order()?;
+        Ok(out)
+    }
+}
+
+impl fmt::Display for Regime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_empty() {
+            return f.write_str("∅");
+        }
+        let atomic: Vec<String> = self
+            .atomic_variables()
+            .iter()
+            .map(|v| v.to_lowercase())
+            .collect();
+        let soft: Vec<&str> = self
+            .iter()
+            .filter(|(_, i)| matches!(i, Intervention::Policy { .. }))
+            .map(|(v, _)| v)
+            .collect();
+        let mut parts = Vec::new();
+        if !atomic.is_empty() {
+            parts.push(format!("do({})", atomic.join(", ")));
+        }
+        if !soft.is_empty() {
+            parts.push(format!("σ_{{{}}}", soft.join(", ")));
+        }
+        f.write_str(&parts.join(", "))
     }
 }
 
@@ -297,6 +497,10 @@ impl SelectionDiagram {
     }
 
     /// The diagram with one S-node per source pointing at its discrepancies.
+    ///
+    /// For a d-separation query about one source use
+    /// [`SelectionDiagram::augmented_for`]: here every other source's S-node
+    /// acts as a common cause of its children.
     #[must_use]
     pub fn augmented(&self) -> Admg {
         let mut g = self.graph.clone();
@@ -308,6 +512,43 @@ impl SelectionDiagram {
             }
         }
         g
+    }
+
+    /// The diagram with only `source`'s S-node, and that node's name; `None`
+    /// when `Δ^{source,*}` is empty and there is no S-node to draw.
+    ///
+    /// Unlike [`SelectionDiagram::augmented`], the other sources' S-nodes are
+    /// left out: when `π^source` is compared with `π*` they are constants, and
+    /// drawn in they would act as common causes of their children.
+    ///
+    /// # Errors
+    ///
+    /// [`TransportError::Unknown`] for an unknown source.
+    pub fn augmented_for(&self, source: &str) -> Result<(Admg, Option<String>), TransportError> {
+        let delta = self.delta(source)?;
+        if delta.is_empty() {
+            return Ok((self.graph.clone(), None));
+        }
+        let mut g = self.graph.clone();
+        let node = self.s_node(source);
+        g.add_node(&node);
+        for v in delta {
+            g.directed(&node, v);
+        }
+        Ok((g, Some(node)))
+    }
+
+    /// As [`SelectionDiagram::augmented_for`], but the S-node is always
+    /// drawn, isolated when `Δ^{source,*}` is empty, so that it can appear in
+    /// a separation query either way.
+    pub(crate) fn with_s_node(&self, source: &str) -> Result<(Admg, String), TransportError> {
+        let (mut g, s) = self.augmented_for(source)?;
+        let s = s.unwrap_or_else(|| {
+            let node = self.s_node(source);
+            g.add_node(&node);
+            node
+        });
+        Ok((g, s))
     }
 
     /// S-admissibility (Def. 11.2.2): `S_source ⊥ A | Z` in the diagram, which
@@ -333,8 +574,8 @@ impl SelectionDiagram {
             }
             return Ok(true);
         }
-        let s = self.s_node(source);
-        Ok(self.augmented().is_d_separated(&[&s], a, z)?)
+        let (g, s) = self.with_s_node(source)?;
+        Ok(g.is_d_separated(&[&s], a, z)?)
     }
 
     /// Adds the representation node `R†` of Def. 11.2.9 with arrows from the

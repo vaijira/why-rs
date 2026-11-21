@@ -984,3 +984,26 @@ fn errors_are_reported() {
     assert!(matches!(list_dtr_dist(&d, "2", "Y", &["X"]), Err(TransportError::Unknown(_))));
     assert!(matches!(d.augment("X", &[]), Err(TransportError::InvalidInput(_))));
 }
+
+/// Another source's S-node is not a common cause of its children: with
+/// `Δ¹ = {A}` and `Δ² = {A, B}`, conditioning on `A` must not open
+/// `S_1 → A ← S_2 → B → Y`. `P*(y | a) = P¹(y | a)` holds, and does so
+/// numerically.
+#[test]
+fn other_sources_s_nodes_do_not_connect_their_children() {
+    let mut g = Admg::new();
+    g.directed("A", "Y");
+    g.directed("B", "Y");
+    let d = SelectionDiagram::new(g)
+        .with_source("1", &["A"])
+        .unwrap()
+        .with_source("2", &["A", "B"])
+        .unwrap();
+    assert!(d.is_s_admissible("1", &["Y"], &["A"]).unwrap());
+    assert!(is_directly_transportable(&d, "1", "Y", &["A"]).unwrap());
+    assert!(list_dtr_dist(&d, "1", "Y", &["A", "B"]).unwrap().contains(&vec!["A".to_string()]));
+    let model = Model::from_diagram(&d, 17);
+    let exact = Exact::new(&model);
+    let e = Estimand::p(Domain::source("1"), &["Y"], &["A"]);
+    assert_sound(&exact, &e, "Y", &["A"], "P*(y | a) from π¹");
+}

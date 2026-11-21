@@ -370,24 +370,7 @@ impl Estimand {
                         .map(|n| (base(n), env[n].as_str()))
                         .collect()
                 }
-                let g = bind(given, env);
-                let mut joint = bind(vars, env);
-                joint.extend(g.iter().copied());
-                let num = dists.probability(domain, &joint)?;
-                if g.is_empty() {
-                    return Ok(num);
-                }
-                let den = dists.probability(domain, &g)?;
-                if den <= 0.0 {
-                    return Err(TransportError::Positivity(format!(
-                        "P^{domain}({}) = 0",
-                        g.iter()
-                            .map(|(k, v)| format!("{k}={v}"))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )));
-                }
-                Ok(num / den)
+                dists.conditional(domain, &bind(vars, env), &bind(given, env))
             }
             Self::Product(fs) => {
                 let mut total = 1.0;
@@ -469,11 +452,47 @@ impl Estimand {
                 vars,
                 given,
             } => {
-                if given.is_empty() {
-                    write!(f, "P^{domain}({})", lower(vars))
-                } else {
-                    write!(f, "P^{domain}({} | {})", lower(vars), lower(given))
+                // An atomic intervention's value is shown in `do(·)`, after
+                // the bar, rather than among the conditioning variables.
+                let (head, shown, regime) = match domain {
+                    Domain::Policy => ("P̂".to_string(), given.clone(), None),
+                    Domain::Under(d, r) => {
+                        let fixed = r.atomic_variables();
+                        let (set, shown): (Vec<String>, Vec<String>) =
+                            given.iter().cloned().partition(|g| fixed.contains(base(g)));
+                        let done: Vec<String> = fixed
+                            .iter()
+                            .map(|v| {
+                                set.iter()
+                                    .find(|g| base(g) == v)
+                                    .unwrap_or(v)
+                                    .to_lowercase()
+                            })
+                            .collect();
+                        let soft: Vec<&str> = r
+                            .iter()
+                            .filter(|(v, _)| !fixed.contains(*v))
+                            .map(|(v, _)| v)
+                            .collect();
+                        let mut parts = Vec::new();
+                        if !done.is_empty() {
+                            parts.push(format!("do({})", done.join(", ")));
+                        }
+                        if !soft.is_empty() {
+                            parts.push(format!("σ_{{{}}}", soft.join(", ")));
+                        }
+                        (format!("P^{d}"), shown, Some(parts.join(", ")))
+                    }
+                    d => (format!("P^{d}"), given.clone(), None),
+                };
+                write!(f, "{head}({}", lower(vars))?;
+                if !shown.is_empty() {
+                    write!(f, " | {}", lower(&shown))?;
                 }
+                if let Some(r) = regime {
+                    write!(f, "; {r}")?;
+                }
+                f.write_str(")")
             }
             Self::Product(fs) if fs.is_empty() => f.write_str("1"),
             Self::Product(fs) => {
@@ -537,6 +556,40 @@ pub trait Distributions {
     /// [`TransportError::MissingData`] when the domain has no distribution or
     /// its distribution does not cover a variable of the event.
     fn probability(&self, domain: &Domain, event: &[(&str, &str)]) -> Result<f64, TransportError>;
+
+    /// `P^domain(event | given)`. The default divides two calls to
+    /// [`Distributions::probability`]; override it for a domain known only
+    /// as a conditional, such as [`Domain::Policy`].
+    ///
+    /// # Errors
+    ///
+    /// [`TransportError::Positivity`] when `given` has probability zero, and
+    /// whatever [`Distributions::probability`] reports.
+    fn conditional(
+        &self,
+        domain: &Domain,
+        event: &[(&str, &str)],
+        given: &[(&str, &str)],
+    ) -> Result<f64, TransportError> {
+        let mut joint = event.to_vec();
+        joint.extend(given.iter().copied());
+        let num = self.probability(domain, &joint)?;
+        if given.is_empty() {
+            return Ok(num);
+        }
+        let den = self.probability(domain, given)?;
+        if den <= 0.0 {
+            return Err(TransportError::Positivity(format!(
+                "P^{domain}({}) = 0",
+                given
+                    .iter()
+                    .map(|(k, v)| format!("{k}={v}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )));
+        }
+        Ok(num / den)
+    }
 }
 
 /// A domain and a sorted joint assignment.

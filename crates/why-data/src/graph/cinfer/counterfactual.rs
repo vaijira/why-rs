@@ -933,10 +933,10 @@ struct CtfFactor {
 }
 
 /// The result of [`gen_query_tree`]: the tree, and what composing needs.
-struct Plan {
-    tree: CtfTree,
+pub(crate) struct Plan {
+    pub(crate) tree: CtfTree,
     /// The Ξ leaves: q-tree index, target c-factor and its values.
-    leaves: Vec<(usize, CFactor, BTreeMap<String, usize>)>,
+    pub(crate) leaves: Vec<(usize, CFactor, BTreeMap<String, usize>)>,
     /// Summed in the numerator, or in the whole estimand.
     summed: Vec<Sym>,
     /// For a conditional: the queried values, summed in the denominator, and
@@ -944,7 +944,7 @@ struct Plan {
     conditional: Option<(Vec<Sym>, BTreeMap<String, String>)>,
 }
 
-enum Built {
+pub(crate) enum Built {
     Plan(Plan),
     Constant(CtfTree, CtfEstimand),
 }
@@ -965,7 +965,7 @@ pub fn gen_query_tree(g: &Admg, query: &CtfQuery) -> Result<CtfTree, CtfError> {
 }
 
 #[allow(clippy::too_many_lines)]
-fn build(g: &Admg, query: &CtfQuery) -> Result<Built, CtfError> {
+pub(crate) fn build(g: &Admg, query: &CtfQuery) -> Result<Built, CtfError> {
     if query.events.is_empty() {
         return Err(DSepError::Empty("the queried events").into());
     }
@@ -1285,15 +1285,40 @@ pub fn ctf_infer(g: &Admg, query: &CtfQuery, inputs: &[Input]) -> Result<CtfDeri
     }
 
     let order = g.topological_order()?;
+    let estimand = compose(g, query, &plan, |leaf| {
+        let Some(&Source::Input { input, node }) = mapping.get(&leaf) else {
+            unreachable!("every leaf was mapped")
+        };
+        evaluate(g, &input_trees[input], node, &inputs[input], &order)
+    })?;
+    Ok(CtfDerivation {
+        query_tree: plan.tree,
+        input_trees,
+        mapping,
+        estimand: CtfEstimand::Formula(estimand),
+    })
+}
+
+/// `COMPOSEQUERY` for a counterfactual plan: `formula_of(leaf)` is the
+/// c-factor of Ξ leaf `leaf` as a function of its variables, from whichever
+/// input produced it. Each is evaluated at the leaf's values, and the
+/// q-tree's Σ or Γ finishes the job.
+///
+/// Chapter 12's counterfactual transport reuses this with factors read from
+/// other domains and regimes.
+pub(crate) fn compose(
+    g: &Admg,
+    query: &CtfQuery,
+    plan: &Plan,
+    mut formula_of: impl FnMut(usize) -> Result<Formula, DSepError>,
+) -> Result<Formula, DSepError> {
+    let order = g.topological_order()?;
     // Parents before children, so the chain rule can merge runs of terms.
     let mut leaves: Vec<&(usize, CFactor, BTreeMap<String, usize>)> = plan.leaves.iter().collect();
     leaves.sort_by_key(|(_, c, _)| order.iter().position(|v| c.scope.contains(v)));
     let mut factors = Vec::new();
     for (leaf, _, at) in leaves {
-        let Some(&Source::Input { input, node }) = mapping.get(leaf) else {
-            unreachable!("every leaf was mapped")
-        };
-        let mut f = evaluate(g, &input_trees[input], node, &inputs[input], &order)?;
+        let mut f = formula_of(*leaf)?;
         let names: BTreeMap<String, String> =
             at.iter().map(|(v, &k)| (v.clone(), value_name(v, k))).collect();
         f.substitute_free(&names);
@@ -1325,16 +1350,11 @@ pub fn ctf_infer(g: &Admg, query: &CtfQuery, inputs: &[Input]) -> Result<CtfDeri
     let mut free = formula.free_vars();
     free.extend(query_values(query));
     formula.avoid_capture(&free);
-    Ok(CtfDerivation {
-        query_tree: plan.tree,
-        input_trees,
-        mapping,
-        estimand: CtfEstimand::Formula(formula),
-    })
+    Ok(formula)
 }
 
 /// The name of every value `query` writes, nested ones included.
-fn query_values(query: &CtfQuery) -> BTreeSet<String> {
+pub(crate) fn query_values(query: &CtfQuery) -> BTreeSet<String> {
     fn walk(c: &Counterfactual, out: &mut BTreeSet<String>) {
         for (k, s) in &c.subscript {
             match s {

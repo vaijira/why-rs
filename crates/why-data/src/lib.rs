@@ -14,6 +14,8 @@ pub mod crl;
 pub mod explain;
 // Documented by its own `//!` header.
 pub mod fairness;
+// Documented by its own `//!` header.
+pub mod generalize;
 /// Causal graph support
 pub mod graph;
 // Documented by its own `//!` header, which is where the intra-doc links
