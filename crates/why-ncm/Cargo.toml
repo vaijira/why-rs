@@ -1,0 +1,17 @@
+[package]
+name = "why-ncm"
+version = "0.1.0"
+authors = ["Jorge Perez Burgos <vaijira@gmail.com>"]
+edition = "2024"
+description = "Neural causal models (chapter 13 of the Causal AI book), trained with burn"
+
+[dependencies]
+why-data = { path = "../why-data" }
+# Pure-Rust CPU backend (Flex) with autodiff and the optimizers. Builds for
+# wasm32-unknown-unknown: the getrandom features it needs there are the ones
+# why-data already selects, and Cargo unifies them.
+burn = { version = "0.22.1", default-features = false, features = ["std", "flex", "autodiff", "optim"] }
+
+# Chapter 13 has no notebook; this reproduces the book's worked examples.
+[[example]]
+name = "chapter13_ncm"
