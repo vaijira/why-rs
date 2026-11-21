@@ -25,6 +25,8 @@ pub mod generalize;
 /// Causal graph support
 pub mod graph;
 // Documented by its own `//!` header.
+pub mod hierarchy;
+// Documented by its own `//!` header.
 pub mod ncm;
 // Documented by its own `//!` header.
 pub mod parametric;

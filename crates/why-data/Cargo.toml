@@ -71,6 +71,10 @@ name = "chapter18_representation"
 [[example]]
 name = "chapter19_parametric"
 
+# Chapter 20: layers, realizability, MAB-OPT, SWIGs and augmented DAGs.
+[[example]]
+name = "chapter20_hierarchy"
+
 # WASM-only opt-ins. `rssn` reaches three generations of `rand`, and each
 # `getrandom` behind them refuses to build for wasm32-unknown-unknown until a
 # source of randomness is named; `uuid` does the same. Cargo features are

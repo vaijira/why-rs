@@ -65,7 +65,7 @@ mod pag;
 mod tests;
 
 pub use fci::fci;
-pub(crate) use fci::subsets;
+pub(crate) use fci::{Engine, UNKNOWN_SEPSET, subsets};
 pub use interventional::{
     FNode, augment, i_fci, i_markov_equivalent, psi_fci, psi_markov_equivalent, psi_pc,
 };

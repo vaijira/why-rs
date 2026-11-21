@@ -139,6 +139,21 @@ impl Pag {
         Ok(self.at(j, i).zip(self.at(i, j)))
     }
 
+    /// Turns every `◦→` into `→` (the last step of AG-CONSTRUCT,
+    /// Algorithm 72).
+    pub(crate) fn arrows_for_circles(&mut self) {
+        for i in 0..self.len() {
+            for j in 0..self.len() {
+                if self.adj(i, j)
+                    && self.at(i, j) == Some(Mark::Arrow)
+                    && self.at(j, i) == Some(Mark::Circle)
+                {
+                    self.set_at(j, i, Mark::Tail);
+                }
+            }
+        }
+    }
+
     /// Every edge as text, such as `A o-> B`, `B --> C`, `X <-> Y` or
     /// `X o-o Y`, with the endpoints in name order, sorted.
     #[must_use]
